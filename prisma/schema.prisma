@@ -1,0 +1,149 @@
+// AI Product Operations Portal — canonical persistence layer
+// Aligns with domain types in src/lib/domain/
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum FeatureStage {
+  INBOX
+  VALUE_REVIEW
+  REJECTED
+  PRD
+  DESIGN_SPEC
+  READY_FOR_BUILD
+  IN_BUILD
+  QA
+  DONE
+}
+
+enum FeatureStatus {
+  idle
+  queued
+  running
+  awaiting_input
+  awaiting_review
+  approved
+  rejected
+  failed
+  blocked
+}
+
+enum RunStatus {
+  pending
+  running
+  completed
+  failed
+  cancelled
+}
+
+enum AgentQuestionStatus {
+  open
+  answered
+  superseded
+}
+
+enum ApprovalRecordStatus {
+  pending
+  approved
+  rejected
+}
+
+model Feature {
+  id          String        @id @default(cuid())
+  title       String
+  description String        @default("")
+  stage       FeatureStage  @default(INBOX)
+  status      FeatureStatus @default(idle)
+  score       Float?
+  /// Context Pack JSON — agents read before running; never invent missing fields
+  contextPack Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  runs           Run[]
+  artifacts      Artifact[]
+  agentQuestions AgentQuestion[]
+  designInputs   DesignInputs?
+  approvals      Approval[]
+}
+
+model Run {
+  id          String    @id @default(cuid())
+  featureId   String
+  feature     Feature   @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  stage       FeatureStage
+  agentName   String
+  status      RunStatus @default(pending)
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  events RunEvent[]
+}
+
+model RunEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  run       Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  message   String
+  timestamp DateTime @default(now())
+}
+
+model Artifact {
+  id              String       @id @default(cuid())
+  featureId       String
+  feature         Feature      @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  stage           FeatureStage
+  type            String
+  contentJson     Json?
+  contentMarkdown String?      @db.Text
+  version         Int          @default(1)
+  createdAt       DateTime     @default(now())
+
+  @@index([featureId, stage])
+}
+
+model AgentQuestion {
+  id           String              @id @default(cuid())
+  featureId    String
+  feature      Feature             @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  stage        FeatureStage
+  agentName    String
+  questionJson Json
+  status       AgentQuestionStatus @default(open)
+  answers      Json?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([featureId, status])
+}
+
+model DesignInputs {
+  featureId        String   @id
+  feature          Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  tokenJson        Json?
+  figmaUrl         String?
+  competitorUrls   Json?
+  screenshots      Json?
+  notes            String?  @db.Text
+  brandDescription String?  @db.Text
+  uxDirection      String?
+  updatedAt        DateTime @updatedAt
+}
+
+model Approval {
+  id          String               @id @default(cuid())
+  featureId   String
+  feature     Feature              @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  stage       FeatureStage
+  status      ApprovalRecordStatus @default(pending)
+  approvedBy  String?
+  createdAt   DateTime             @default(now())
+
+  @@index([featureId, stage])
+}
