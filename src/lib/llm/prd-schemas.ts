@@ -15,10 +15,20 @@ export const prdRequirementLlmSchema = z.object({
   acceptanceCriteria: z.array(z.string()).optional().default([]),
 });
 
+export const prdImplementationTaskSchema = z.object({
+  id: z.string().describe("T1, T2, etc."),
+  title: z.string().describe("One-line summary of the task"),
+  file: z.string().optional().describe("Target file path if known (e.g. app/page.tsx)"),
+  steps: z.array(z.string()).min(1).max(6).describe("Concrete steps to complete this task"),
+  done: z.literal(false).default(false),
+});
+
 export const prdCursorHandoffSchema = z.object({
   implementationChecklist: z.array(z.string()),
   suggestedFilesOrRoutes: z.array(z.string()),
   dependenciesNotes: z.string(),
+  implementationTasks: z.array(prdImplementationTaskSchema).min(2).max(10).optional()
+    .describe("Ordered task list for Cursor Cloud — each task is a scoped unit of work"),
 });
 
 /** User / job stories the builder must satisfy (distinct from P0 requirements). */
@@ -158,6 +168,18 @@ export function prdMarkdownFromJson(
     "**Integration:**",
     p.cursorHandoff.dependenciesNotes,
   );
+  const tasks = p.cursorHandoff.implementationTasks;
+  if (tasks?.length) {
+    lines.push("", "## Implementation tasks (for Cursor Cloud)");
+    for (const t of tasks) {
+      lines.push(
+        "",
+        `### ${t.id}: ${t.title}`,
+        ...(t.file ? [`**File:** \`${t.file}\``] : []),
+        ...t.steps.map((s, i) => `${i + 1}. ${s}`),
+      );
+    }
+  }
   return lines.filter(Boolean).join("\n");
 }
 

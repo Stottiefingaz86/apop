@@ -28,7 +28,11 @@ Required JSON shape:
   "cursorHandoff": {
     "implementationChecklist": string[],
     "suggestedFilesOrRoutes": string[],
-    "dependenciesNotes": string
+    "dependenciesNotes": string,
+    "implementationTasks": [
+      { "id": "T1", "title": string, "file"?: string, "steps": string[], "done": false },
+      ...
+    ]
   },
   "valueHypothesis": string,
   "roadmapLane"?: "SPORTS" | "CASINO" | "MARKETING" | "PAM" | "UNCATEGORIZED",
@@ -46,6 +50,7 @@ Rules:
 - suggestedFilesOrRoutes: plausible \`app/...\` or \`src/components/...\` paths when inferable.
 - **cursorHandoff.implementationChecklist**: must include steps to (a) search the repo for analogous UI by pattern name and product area, (b) extend the closest match if found, (c) only create a new primitive component if no reasonable analogue exists.
 - **cursorHandoff.dependenciesNotes**: mention aligning with existing sibling blocks (same carousel/shell styling as other rails on the site).
+- **cursorHandoff.implementationTasks** (required, 3–8 tasks): This is the **spec-kit style task breakdown** that Cursor Cloud executes directly. Each task is a scoped, ordered unit of work with an id (T1, T2, …), a one-line title, an optional target file path, and 1–6 concrete implementation steps. Tasks should cover: (1) search repo for existing analogous component, (2) create or extend the component, (3) wire it into the page/route, (4) add journey tracking, (5) verify build passes. Keep tasks small and specific — Cursor Cloud should be able to execute each one without re-planning. Order tasks by dependency (do T1 before T2).
 
 Delivery site context:
 ${delivery}`;

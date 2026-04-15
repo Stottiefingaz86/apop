@@ -117,9 +117,24 @@ function buildCursorPromptPlain(opts: {
   const ch = prdJson?.cursorHandoff;
   if (ch && typeof ch === "object") {
     const handoff = ch as Record<string, unknown>;
-    const checklist = handoff.implementationChecklist;
-    if (Array.isArray(checklist) && checklist.length > 0) {
-      lines.push("", "Checklist:", ...checklist.map((x) => `- [ ] ${String(x)}`));
+
+    const tasks = handoff.implementationTasks;
+    if (Array.isArray(tasks) && tasks.length > 0) {
+      lines.push("", "## Tasks (execute in order)");
+      for (const raw of tasks) {
+        if (!raw || typeof raw !== "object") continue;
+        const t = raw as Record<string, unknown>;
+        lines.push(`### ${String(t.id ?? "")}: ${String(t.title ?? "")}`);
+        if (typeof t.file === "string" && t.file.trim()) lines.push(`File: \`${t.file.trim()}\``);
+        const steps = Array.isArray(t.steps) ? t.steps : [];
+        for (let i = 0; i < steps.length; i++) lines.push(`${i + 1}. ${String(steps[i])}`);
+        lines.push("");
+      }
+    } else {
+      const checklist = handoff.implementationChecklist;
+      if (Array.isArray(checklist) && checklist.length > 0) {
+        lines.push("", "Checklist:", ...checklist.map((x) => `- [ ] ${String(x)}`));
+      }
     }
     const routes = handoff.suggestedFilesOrRoutes;
     if (Array.isArray(routes) && routes.length > 0) {

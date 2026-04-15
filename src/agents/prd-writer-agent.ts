@@ -110,6 +110,55 @@ function buildTemplateCursorPrompt(ctx: AgentContext): {
         "Use tokens from design inputs; do not invent a new palette.",
         "Lint + typecheck before PR; note in the PR summary which component you extended.",
       ],
+      implementationTasks: [
+        {
+          id: "T1",
+          title: "Search repo for existing analogous component",
+          steps: [
+            "Search `src/components` and `app/` for a carousel, rail, grid, or similar block.",
+            "If one exists, note the file path — you will extend it in T2.",
+            "If none, plan a new component under `src/components/`.",
+          ],
+          done: false as const,
+        },
+        {
+          id: "T2",
+          title: "Create or extend the UI component",
+          steps: [
+            "Build (or extend) the component per the design spec brand/UX/tokens above.",
+            `Target audience: ${String(v.audience)}. Primary KPI: ${String(v.primaryKpi)}.`,
+            "Use shadcn/ui primitives from `src/components/ui`. Match sibling styling.",
+          ],
+          done: false as const,
+        },
+        {
+          id: "T3",
+          title: "Wire component into the page route",
+          steps: [
+            "Import the component into the appropriate `app/` page.",
+            "Pass real or mock data props; ensure server/client boundary is correct.",
+          ],
+          done: false as const,
+        },
+        {
+          id: "T4",
+          title: "Add journey map tracking",
+          steps: [
+            `Add \`data-apop-feature-id="${ctx.feature.id}"\` to the root element.`,
+            "Fire impression event on mount and click events on interactions.",
+          ],
+          done: false as const,
+        },
+        {
+          id: "T5",
+          title: "Verify build",
+          steps: [
+            "Run `npm run build` and fix any TypeScript or lint errors.",
+            "Confirm the component renders correctly at desktop and mobile widths.",
+          ],
+          done: false as const,
+        },
+      ],
       suggestedFilesOrRoutes: ["`app/` routes inferred from feature title / product area."],
       dependenciesNotes:
         "Align spacing, motion, and card chrome with sibling rails on the same surface (e.g. match an existing casino carousel if this is another themed carousel).",

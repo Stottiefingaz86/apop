@@ -1,8 +1,16 @@
 import type { ComposeShipBriefResult } from "@/lib/domain/ship-brief";
 import { cursorPromptReferenceImagesPreamble } from "@/lib/cursor/cursor-prompt-images";
 
-const CURSOR_INTRO =
-  "Implement this feature. Search for similar UI (carousel, rail, grid); extend existing components. Next.js App Router, shadcn/ui.\n\n";
+const CURSOR_INTRO = [
+  "# Implement this feature",
+  "",
+  "Execute the tasks below. Do NOT re-plan or re-specify — the spec, plan, and tasks",
+  "were already produced by APOP's research pipeline. Jump straight to implementation.",
+  "",
+  "Search the repo for similar UI first; extend existing components. Next.js App Router, shadcn/ui.",
+  "Run `npm run build` when done and fix any errors before opening the PR.",
+  "",
+].join("\n");
 
 function journeyMapTrackingSection(featureId: string, apopAppUrl: string): string {
   const base = apopAppUrl.replace(/\/$/, "");
@@ -25,8 +33,7 @@ function journeyMapTrackingSection(featureId: string, apopAppUrl: string): strin
 
 /**
  * Text body sent to Cursor Cloud (before optional image preamble).
- * Condensed: implementation spec only (no full Value/Research/Design markdown).
- * Matches `POST .../cursor-build` assembly so previews stay accurate.
+ * Lean implementation-only prompt — spec/plan/tasks already done by APOP agents.
  */
 export function buildCursorHandoffPromptText(
   ship: ComposeShipBriefResult,
