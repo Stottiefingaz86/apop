@@ -1,0 +1,69 @@
+================================================================================
+  APOP — get database tables (Prisma) — pick ONE path
+================================================================================
+
+  Prisma needs TWO variables in .env (same value for local Docker):
+
+    DATABASE_URL
+    DIRECT_URL
+
+  Until both point at a Postgres your computer can reach, you will have
+  NO tables and features/runs will not save.
+
+================================================================================
+  PATH 1 — RECOMMENDED: Docker Postgres on your Mac (fewest network issues)
+================================================================================
+
+  1) Install and open Docker Desktop (whale icon running).
+
+  2) Terminal:
+
+       cd /Users/christopherhunt/Desktop/APOP
+       npm run db:up
+
+     Wait until the container is up.
+
+  3) Edit .env — set THESE two lines (you can comment out Supabase DB URLs
+     for now — keep NEXT_PUBLIC_SUPABASE_* if you still use the JS client):
+
+       DATABASE_URL="postgresql://apop:apop@localhost:5432/apop?schema=public"
+       DIRECT_URL="postgresql://apop:apop@localhost:5432/apop?schema=public"
+
+  4) Load nvm then push the schema (creates all tables):
+
+       export NVM_DIR="$HOME/.nvm"
+       [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+       cd /Users/christopherhunt/Desktop/APOP
+       nvm use
+       npx prisma db push
+
+     You want: "Your database is now in sync with your Prisma schema."
+
+  5) Check the app:
+
+       npm run dev
+
+     Open the URL shown in the terminal, then:
+       /api/health   → should show "database": true
+
+================================================================================
+  PATH 2 — Supabase Postgres (only if port 5432 works from your network)
+================================================================================
+
+  1) In .env, DATABASE_URL and DIRECT_URL must use your real DB password and
+     correct project ref (see SUPABASE_STEPS.txt).
+
+  2) Terminal (with nvm, same as step 4 above):
+
+       npx prisma db push
+
+  If you see P1001 "Can't reach database server", use PATH 1 for now.
+
+================================================================================
+  After tables exist
+================================================================================
+
+  • Pipeline + New feature + agent runs all use this database.
+  • Optional: npx prisma studio  (GUI to browse rows)
+
+================================================================================

@@ -7,7 +7,8 @@ export type AgentName =
   | "prd-writer-agent"
   | "design-spec-agent"
   | "build-agent"
-  | "qa-agent";
+  | "qa-agent"
+  | "deployment-fix-agent";
 
 export type AgentRunResult =
   | {
@@ -45,6 +46,17 @@ export type AgentContext = {
   };
   /** Latest artifacts by type for downstream agents */
   artifactsByType: Map<string, { contentJson: unknown; contentMarkdown: string | null }>;
+  /** Populated for deployment-fix-agent — pulled from Vercel API, not user paste */
+  deploymentDiagnostics?: {
+    releaseId: string;
+    vercelDeploymentId: string;
+    status: string;
+    errorMessage: string | null;
+    inspectorUrl: string | null;
+    buildLogExcerpt: string;
+  };
+  /** Workspace Knowledge entries (truncated) — ground analysis in org facts, KPIs, research, file extracts */
+  workspaceKnowledgeBrief?: string | null;
 };
 
 export type FeatureAgent = {

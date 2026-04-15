@@ -6,6 +6,9 @@ export const ARTIFACT_TYPES = {
   AGENT_QUESTIONS: "agent_questions",
   BUILD_PLACEHOLDER: "build_placeholder",
   QA_PLACEHOLDER: "qa_placeholder",
+  DEPLOYMENT_REMEDIATION: "deployment_remediation",
+  /** Consolidated handoff doc (optional snapshot from build-agent; UI also composes live). */
+  SHIP_BRIEF: "ship_brief",
 } as const;
 
 export type ArtifactType = (typeof ARTIFACT_TYPES)[keyof typeof ARTIFACT_TYPES];

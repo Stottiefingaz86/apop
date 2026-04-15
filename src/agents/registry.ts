@@ -5,6 +5,7 @@ import { prdWriterAgent } from "./prd-writer-agent";
 import { designSpecAgent } from "./design-spec-agent";
 import { buildAgent } from "./build-agent";
 import { qaAgent } from "./qa-agent";
+import { deploymentFixAgent } from "./deployment-fix-agent";
 
 const AGENTS: FeatureAgent[] = [
   valueAnalystAgent,
@@ -12,6 +13,7 @@ const AGENTS: FeatureAgent[] = [
   designSpecAgent,
   buildAgent,
   qaAgent,
+  deploymentFixAgent,
 ];
 
 const byName = new Map<AgentName, FeatureAgent>(

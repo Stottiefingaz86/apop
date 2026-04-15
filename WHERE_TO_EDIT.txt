@@ -1,0 +1,56 @@
+================================================================================
+  APOP — WHERE TO PUT SUPABASE / DB VALUES (ONLY ONE FILE)
+================================================================================
+
+  FILE (on your Mac):
+
+    /Users/christopherhunt/Desktop/APOP/.env
+
+  That file is NOT committed to git. You edit it locally.
+
+--------------------------------------------------------------------------------
+  STEP 1 — Open `.env` in your editor
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+  STEP 2 — Find this exact text (use Find in editor)
+--------------------------------------------------------------------------------
+
+    PASTE_DB_PASSWORD_HERE
+
+  It appears TWICE: inside DATABASE_URL and inside DIRECT_URL.
+
+--------------------------------------------------------------------------------
+  STEP 3 — Replace BOTH with the same password
+--------------------------------------------------------------------------------
+
+  Source in Supabase (browser):
+
+    Your project → gear icon Project Settings → Database
+
+  Use either:
+    • the "Database password" you created for the project, OR
+    • the full "Connection string" URI → copy the password out of the URI
+
+  If your password contains @  #  :  /  ?  encode them for URLs (e.g. @ → %40).
+
+--------------------------------------------------------------------------------
+  STEP 4 — Optional API keys (already in .env if you copied earlier)
+--------------------------------------------------------------------------------
+
+  NEXT_PUBLIC_SUPABASE_URL          → https://<project-ref>.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY → publishable key (browser-safe)
+  SUPABASE_SECRET_KEY               → secret key (server only); leave blank until needed
+
+  Prisma does NOT use these keys — only DATABASE_URL / DIRECT_URL.
+
+--------------------------------------------------------------------------------
+  STEP 5 — Verify & apply schema
+--------------------------------------------------------------------------------
+
+  In Terminal, project folder:
+
+    npm run env:check
+    npx prisma db push
+
+================================================================================

@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { parseContextPack } from "@/lib/domain/context-pack";
+import { enrichContextPackFromFeature } from "@/lib/domain/context-pack-inference";
 import { mergeAnswersIntoStores } from "@/lib/apply-agent-answers";
+import { executeFeatureRun } from "@/jobs/execute-feature-run";
 
 const bodySchema = z.object({
   questionRecordId: z.string().min(1),
@@ -53,6 +55,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }),
   ]);
 
-  const updated = await prisma.feature.findUnique({ where: { id } });
-  return NextResponse.json({ ok: true, feature: updated });
+  const updated = await prisma.feature.findUniqueOrThrow({ where: { id } });
+  const enriched = enrichContextPackFromFeature(parseContextPack(updated.contextPack), {
+    title: updated.title,
+    description: updated.description ?? "",
+  });
+  const contextComplete =
+    !!enriched.productArea?.trim() &&
+    !!enriched.targetAudience?.trim() &&
+    !!enriched.primaryKpi?.trim();
+
+  if (contextComplete) {
+    void executeFeatureRun({ featureId: id, stage: updated.stage }).catch((e) => {
+      console.error("[answer] auto re-run after structured answers failed", e);
+    });
+  }
+
+  return NextResponse.json({ ok: true, feature: updated, resumed: contextComplete });
 }

@@ -1,0 +1,93 @@
+================================================================================
+  APOP + Supabase — small steps (read in order)
+================================================================================
+
+  Supabase gives you TWO different ways to connect. Both are normal.
+
+  A) WEBSITE API (HTTPS) — used by @supabase/supabase-js in the app
+  B) POSTGRES (port 5432) — used by Prisma to create tables
+
+  You need BOTH set in your .env file (one file on your computer).
+
+--------------------------------------------------------------------------------
+  STEP 1 — Open one file
+--------------------------------------------------------------------------------
+
+  Folder:  APOP
+  File:    .env
+
+  (If there is no .env, copy .env.example and rename the copy to .env)
+
+--------------------------------------------------------------------------------
+  STEP 2 — Website API (for the app / status check)
+--------------------------------------------------------------------------------
+
+  In Supabase (browser):
+    • Click your project
+    • Left sidebar: Project Settings (gear) → API
+
+  Copy into .env:
+
+    NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_...   (or "anon" key from same page)
+
+  Save the file.
+
+--------------------------------------------------------------------------------
+  STEP 3 — Postgres (for Prisma / tables only)
+--------------------------------------------------------------------------------
+
+  In Supabase:
+    • Project Settings → Database
+
+  You need the DATABASE PASSWORD (not the publishable key).
+
+  In .env you should have two lines (same password in both):
+
+    DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres?schema=public&sslmode=require
+    DIRECT_URL=postgresql://postgres:YOUR_PASSWORD@db.YOUR-PROJECT-REF.supabase.co:5432/postgres?schema=public&sslmode=require
+
+  Replace YOUR_PASSWORD and YOUR-PROJECT-REF. The ref must match the URL in the dashboard.
+
+--------------------------------------------------------------------------------
+  STEP 4 — Restart the dev server (important)
+--------------------------------------------------------------------------------
+
+  In Terminal:
+
+    cd /path/to/APOP
+    npm run dev:clean
+
+  (Stops bad cache.)
+
+  IMPORTANT: Look at the Terminal line that says:
+    Local: http://localhost:XXXX
+  Use that port (3000, 3001, 3002, …). Next picks another port if 3000 is busy.
+
+--------------------------------------------------------------------------------
+  STEP 5 — Test in the browser (in this order)
+--------------------------------------------------------------------------------
+
+  Replace XXXX with the port from "Local: http://localhost:XXXX"
+
+  1) http://localhost:XXXX/api/ok
+     → Should show JSON: { "ok": true, ... }
+
+  2) http://localhost:XXXX/api/supabase/status
+     → Should show JSON (not a blank "Internal Server Error" page)
+
+  3) In Terminal (creates tables):
+
+    npx prisma db push
+
+--------------------------------------------------------------------------------
+  If /api/ok is already "Internal Server Error"
+--------------------------------------------------------------------------------
+
+  Your Next server is broken or running old code. Run:
+
+    npm run dev:clean
+
+  Try /api/ok again.
+
+================================================================================

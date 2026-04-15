@@ -26,6 +26,7 @@ export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
 
 /** Maps pipeline stage → default agent responsible for that stage’s primary work. */
 export const STAGE_DEFAULT_AGENT: Record<FeatureStage, string | null> = {
+  /** Backlog only — drag to Research Analysis to start value analysis. */
   INBOX: null,
   VALUE_REVIEW: "value-analyst-agent",
   REJECTED: null,

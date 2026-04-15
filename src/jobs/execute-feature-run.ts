@@ -1,16 +1,21 @@
-import type { FeatureStage } from "@prisma/client";
+import type { FeatureStage, RoadmapLane } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isFeatureStage } from "@/lib/domain/stages";
+import { isRoadmapLane } from "@/lib/domain/roadmap-lanes";
 import { parseContextPack } from "@/lib/domain/context-pack";
+import { enrichContextPackFromFeature } from "@/lib/domain/context-pack-inference";
 import { ARTIFACT_TYPES } from "@/lib/domain/artifact-types";
 import {
   featureStatusAfterSuccessfulRun,
   featureStatusForArtifactReview,
   featureStatusForQuestions,
+  featureStatusForRunStart,
   STAGE_DEFAULT_AGENT,
 } from "@/lib/domain/run-lifecycle";
 import { getAgent } from "@/agents/registry";
 import type { AgentContext, AgentName } from "@/agents/types";
 import { agentQuestionsPayloadSchema } from "@/lib/domain/agent-questions";
+import { loadWorkspaceKnowledgeBriefSafe } from "@/lib/data/workspace-knowledge-load";
 
 export type ExecuteRunOptions = {
   featureId: string;
@@ -52,10 +57,14 @@ export async function executeFeatureRun(options: ExecuteRunOptions): Promise<{ r
     (await prisma.designInputs.create({ data: { featureId } }));
 
   const artifactsByType = await loadArtifactsMap(featureId);
+  const workspaceKnowledgeBrief = await loadWorkspaceKnowledgeBriefSafe();
 
   const ctx: AgentContext = {
     feature,
-    contextPack: parseContextPack(feature.contextPack),
+    contextPack: enrichContextPackFromFeature(parseContextPack(feature.contextPack), {
+      title: feature.title,
+      description: feature.description ?? "",
+    }),
     designInputs: {
       tokenJson: designRow.tokenJson,
       figmaUrl: designRow.figmaUrl,
@@ -66,6 +75,7 @@ export async function executeFeatureRun(options: ExecuteRunOptions): Promise<{ r
       uxDirection: designRow.uxDirection,
     },
     artifactsByType,
+    workspaceKnowledgeBrief,
   };
 
   const run = await prisma.run.create({
@@ -84,6 +94,11 @@ export async function executeFeatureRun(options: ExecuteRunOptions): Promise<{ r
   };
 
   await log(`Run started for ${agentName} @ ${stage}`);
+
+  await prisma.feature.update({
+    where: { id: featureId },
+    data: { status: featureStatusForRunStart() },
+  });
 
   try {
     const result = await agent.run(ctx);
@@ -177,6 +192,35 @@ export async function executeFeatureRun(options: ExecuteRunOptions): Promise<{ r
       ? featureStatusForArtifactReview()
       : featureStatusAfterSuccessfulRun();
 
+    let roadmapLaneFromPrd: RoadmapLane | undefined;
+    if (result.type === ARTIFACT_TYPES.PRD) {
+      const raw = (result.contentJson as Record<string, unknown>).roadmapLane;
+      if (typeof raw === "string" && isRoadmapLane(raw)) {
+        roadmapLaneFromPrd = raw;
+      }
+    }
+
+    const safeScore =
+      typeof result.score === "number"
+        ? result.score
+        : typeof feature.score === "number"
+          ? feature.score
+          : null;
+    const safeStage: FeatureStage =
+      typeof nextStage === "string" && isFeatureStage(nextStage)
+        ? nextStage
+        : feature.stage;
+
+    const featureUpdateData: Parameters<typeof prisma.feature.update>[0]["data"] = {
+      status: reviewStatus,
+      score: safeScore,
+      stage: safeStage,
+      updatedAt: new Date(),
+    };
+    if (roadmapLaneFromPrd) {
+      featureUpdateData.roadmapLane = roadmapLaneFromPrd;
+    }
+
     await prisma.run.update({
       where: { id: run.id },
       data: { status: "completed", completedAt: new Date() },
@@ -184,27 +228,28 @@ export async function executeFeatureRun(options: ExecuteRunOptions): Promise<{ r
 
     await prisma.feature.update({
       where: { id: featureId },
-      data: {
-        status: reviewStatus,
-        score: result.score ?? feature.score,
-        stage: nextStage ?? feature.stage,
-        updatedAt: new Date(),
-      },
+      data: featureUpdateData,
     });
 
     await log("Run completed");
     return { runId: run.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const full = e instanceof Error ? String(e) : msg;
     await log(`Error: ${msg}`);
-    await prisma.run.update({
-      where: { id: run.id },
-      data: { status: "failed", completedAt: new Date() },
-    });
-    await prisma.feature.update({
-      where: { id: featureId },
-      data: { status: "failed" },
-    });
+    try {
+      await prisma.run.update({
+        where: { id: run.id },
+        data: { status: "failed", completedAt: new Date() },
+      });
+      await prisma.feature.update({
+        where: { id: featureId },
+        data: { status: "failed" },
+      });
+    } catch (cleanupErr) {
+      await log(`Cleanup failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`);
+    }
+    console.error("[execute-feature-run] full error:", full);
     return { runId: run.id };
   }
 }

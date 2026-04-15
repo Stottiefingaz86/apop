@@ -29,9 +29,23 @@ export const agentQuestionsPayloadSchema = z.object({
 
 export type AgentQuestionsPayload = z.infer<typeof agentQuestionsPayloadSchema>;
 
+function normalizeJsonField(raw: unknown): unknown {
+  if (raw == null) return null;
+  if (typeof raw !== "string") return raw;
+  const t = raw.trim();
+  if (!t) return null;
+  try {
+    return JSON.parse(t) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export function parseAgentQuestionsPayload(
   raw: unknown,
 ): AgentQuestionsPayload | null {
-  const r = agentQuestionsPayloadSchema.safeParse(raw);
+  const normalized = normalizeJsonField(raw);
+  if (normalized == null) return null;
+  const r = agentQuestionsPayloadSchema.safeParse(normalized);
   return r.success ? r.data : null;
 }

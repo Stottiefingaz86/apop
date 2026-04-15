@@ -1,0 +1,17 @@
+services:
+  postgres:
+    # If pulls fail (timeout), try: docker pull postgres:16
+    image: postgres:16
+    container_name: apop-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: apop
+      POSTGRES_PASSWORD: apop
+      POSTGRES_DB: apop
+    volumes:
+      - apop_pgdata:/var/lib/postgresql/data
+
+volumes:
+  apop_pgdata:

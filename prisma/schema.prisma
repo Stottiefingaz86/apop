@@ -6,8 +6,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  /// Same DB as `DATABASE_URL` locally. On Supabase: use the direct (5432) URI for migrations; use the pooler URI for `DATABASE_URL` in serverless.
+  directUrl = env("DIRECT_URL")
 }
 
 enum FeatureStage {
@@ -20,6 +22,15 @@ enum FeatureStage {
   IN_BUILD
   QA
   DONE
+}
+
+/// Product-area columns on the org roadmap (Sports, Casino, etc.).
+enum RoadmapLane {
+  SPORTS
+  CASINO
+  MARKETING
+  PAM
+  UNCATEGORIZED
 }
 
 enum FeatureStatus {
@@ -54,6 +65,25 @@ enum ApprovalRecordStatus {
   rejected
 }
 
+enum ReleaseStatus {
+  pending
+  building
+  ready
+  error
+  canceled
+}
+
+/// Workspace knowledge base — agents can consume later; humans add facts, links, dumps (no secrets in body).
+enum KnowledgeCategory {
+  DATA_API
+  DATA_DUMP
+  FIGMA_MCP
+  KPI
+  RESEARCH
+  SURVEY
+  OTHER
+}
+
 model Feature {
   id          String        @id @default(cuid())
   title       String
@@ -63,14 +93,85 @@ model Feature {
   score       Float?
   /// Context Pack JSON — agents read before running; never invent missing fields
   contextPack Json?
+  /// Roadmap swimlane (Sports, Casino, Marketing, PAM, or uncategorized).
+  roadmapLane RoadmapLane @default(UNCATEGORIZED)
+  /// Human-readable cost / effort (e.g. eng weeks, budget band). Shown on roadmap only.
+  roadmapCostEstimate String? @db.Text
+  /// Optional directional expected lift (e.g. 12 for +12%). Not a financial commitment.
+  roadmapExpectedLiftPercent Float?
+  /// What the lift applies to (e.g. “same-game parlay attach rate”).
+  roadmapExpectedLiftMetric String? @db.VarChar(500)
+  /// Target ship date for roadmap time-axis (quarters / months). Null = use createdAt.
+  roadmapTargetDate DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
+  journeyTrackingEvents JourneyTrackingEvent[]
   runs           Run[]
   artifacts      Artifact[]
   agentQuestions AgentQuestion[]
   designInputs   DesignInputs?
-  approvals      Approval[]
+  approvals        Approval[]
+  releases         Release[]
+  cursorAgentJobs  CursorAgentJob[]
+}
+
+/// Cursor Cloud Agent (api.cursor.com) launched from APOP with the Ship PRD handoff.
+model CursorAgentJob {
+  id               String   @id @default(cuid())
+  featureId        String
+  feature          Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  cursorAgentId    String   @unique
+  status           String?
+  /// Latest human-readable line from Cursor Cloud Agents API (`summary` field) when present
+  cursorSummary    String?  @db.Text
+  agentUrl         String?
+  prUrl            String?
+  /// Git branch Cursor created for this run (e.g. apop/cmn4…); previews in Vercel are for this branch, not the hook Deploy row in APOP
+  targetBranch     String?
+  /// Public https URL for latest Vercel Preview deployment on targetBranch (from Vercel API when VERCEL_TOKEN + VERCEL_PROJECT_ID set)
+  vercelPreviewUrl String?
+  errorMessage     String?  @db.Text
+  autoDeploy       Boolean  @default(false)
+  deployTriggered  Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([featureId, createdAt])
+}
+
+/// Tracks a Vercel deployment triggered from APOP for a feature (site-apop releases).
+model Release {
+  id                 String        @id @default(cuid())
+  featureId          String
+  feature            Feature       @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  status             ReleaseStatus @default(pending)
+  vercelDeploymentId String?       @unique
+  vercelUrl          String?
+  inspectorUrl       String?
+  readyState         String?
+  errorMessage       String?       @db.Text
+  buildLogExcerpt    String?       @db.Text
+  /// Prevents duplicate auto-fix agent runs for the same failed deployment
+  fixRunTriggered    Boolean       @default(false)
+  rawPayload         Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@index([featureId, createdAt])
+}
+
+/// Events from site-apop journey map (/journey-map) — clicks, impressions per feature.
+model JourneyTrackingEvent {
+  id        String   @id @default(cuid())
+  featureId String
+  feature   Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  eventType String   @db.VarChar(32)
+  route     String?  @db.VarChar(500)
+  elementId  String?  @db.VarChar(200)
+  createdAt DateTime @default(now())
+
+  @@index([featureId, eventType, createdAt])
 }
 
 model Run {
@@ -146,4 +247,23 @@ model Approval {
   createdAt   DateTime             @default(now())
 
   @@index([featureId, stage])
+}
+
+/// Org-wide knowledge: APIs, dumps, MCP notes, KPIs, research, surveys — extends what agents treat as business truth.
+model KnowledgeEntry {
+  id        String             @id @default(cuid())
+  title     String
+  /// Short line for lists (optional)
+  summary   String?            @db.Text
+  /// Main content: paste dumps, methodology, bullet KPIs, research notes, etc.
+  body      String             @db.Text
+  category  KnowledgeCategory  @default(OTHER)
+  /// Non-secret metadata, e.g. { "referenceUrl": "https://...", "files": [{ "name", "mimeType" }] }
+  meta      Json?
+  /// Text extracted from uploaded PDF/CSV/XLSX (for search + agents); user body stays separate.
+  attachmentExtract String?    @db.Text
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@index([category, updatedAt])
 }

@@ -1,0 +1,17 @@
+---
+description: Clean Next.js dev — clear .next, free ports, avoid stale chunk errors
+alwaysApply: true
+---
+
+# APOP dev servers
+
+When starting or restarting the Next dev server for this repo (or the user hits missing chunk / `Cannot find module './NNN.js'` errors):
+
+1. **Prefer** `npm run dev` — it **always removes `.next` first** so webpack chunks stay in sync.
+2. If the port is stuck or a zombie server is running: `npm run dev:fresh` (frees **3000** and **3020**, then deletes `.next`, then starts dev).
+3. For this project on port **3020**: `npm run dev:3020` (also clears `.next`). Stuck port: `npm run dev:fresh:3020`.
+4. **Do not** tell the user to “just run next dev” without cleaning if they reported runtime / chunk errors — use `dev` or `dev:fresh` instead.
+5. **Fast iteration** (skip `.next` delete): `npm run dev:fast` or `npm run dev:3020:fast` — only when the user explicitly wants speed and there are no build weirdness.
+6. Before a release sanity check: `npm run build:clean`.
+
+Explicit port kill only: `npm run port:free`.

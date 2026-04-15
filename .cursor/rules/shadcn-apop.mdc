@@ -1,0 +1,18 @@
+---
+description: Use shadcn/ui paths, CLI, and the right primitives for APOP portal UI work
+globs: src/components/**/*,src/app/**/*.tsx
+alwaysApply: false
+---
+
+# shadcn/ui in APOP
+
+- **Config:** `components.json` at repo root (new-york, RSC, Lucide).
+- **Primitives:** `src/components/ui/` — import `@/components/ui/<component>`.
+- **Utilities:** `cn()` from `@/lib/utils/cn`.
+- **Add components:** `npx shadcn@latest add <name>` (see [shadcn docs](https://ui.shadcn.com/docs)).
+
+Before building UI, read `src/lib/ui-agent/shadcn-portal.ts` for the **component-by-job** map and **installed** list.
+
+**Rules:** semantic tokens (`bg-background`, `text-muted-foreground`), `gap-*` not `space-y-*`, full `Card` composition, accessible titles on overlays, `cn()` for conditional classes.
+
+Design-spec artifacts already embed a shadcn section; keep implementation aligned with that brief.

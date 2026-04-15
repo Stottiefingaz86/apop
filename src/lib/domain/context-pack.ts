@@ -11,9 +11,30 @@ export const contextPackSchema = z.object({
   secondaryKpis: z.array(z.string()).optional(),
   strategicPriority: z.string().optional(),
   designFramework: z.string().optional(),
+  /** Optional legacy hint only; models infer drives from the idea by default */
   octalysisFocus: z.array(z.string()).optional(),
   constraints: z.string().optional(),
-});
+  /** Vercel Preview / branch URL or staging — reviewers open this from APOP without a production deploy */
+  previewUrl: z.string().optional(),
+  /** Optional screenshots (base64 without data URL prefix) for vision-capable value analysis */
+  referenceImages: z
+    .array(
+      z.object({
+        name: z.string(),
+        mimeType: z.string(),
+        dataBase64: z.string(),
+      }),
+    )
+    .max(3)
+    .optional(),
+  /** Optional PRD PDF (base64) — filename + note to model; full parsing not automated yet */
+  referencePrdPdf: z
+    .object({
+      name: z.string(),
+      dataBase64: z.string(),
+    })
+    .optional(),
+}).passthrough();
 
 export type ContextPack = z.infer<typeof contextPackSchema>;
 
