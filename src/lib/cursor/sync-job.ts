@@ -5,6 +5,8 @@ import { isCursorAgentFinished, isCursorAgentSucceeded } from "@/lib/cursor/agen
 import { resolveCursorBranchPreviewVisitUrl } from "@/lib/vercel/cursor-branch-preview";
 import { getVercelProjectId, getVercelToken } from "@/lib/vercel/env";
 import { syncLatestReleaseForFeature } from "@/lib/vercel/release-sync";
+import { fetchSpecKitFilesFromBranch } from "@/lib/cursor/fetch-spec-files";
+import { ARTIFACT_TYPES } from "@/lib/domain/artifact-types";
 
 export async function syncLatestCursorJobForFeature(featureId: string) {
   const job = await prisma.cursorAgentJob.findFirst({
@@ -102,7 +104,86 @@ export async function syncLatestCursorJobForFeature(featureId: string) {
     void syncLatestReleaseForFeature(featureId).catch(() => undefined);
   }
 
-  if (isCursorAgentSucceeded(status)) {
+  if (isCursorAgentSucceeded(status) && fresh.jobPhase === "spec") {
+    const existingPrd = await prisma.artifact.findFirst({
+      where: { featureId, type: ARTIFACT_TYPES.PRD },
+      orderBy: { version: "desc" },
+    });
+    const alreadyHasSpecKit =
+      existingPrd?.contentJson &&
+      typeof existingPrd.contentJson === "object" &&
+      (existingPrd.contentJson as Record<string, unknown>).specKitSource === true;
+
+    if (!alreadyHasSpecKit && fresh.targetBranch?.trim()) {
+      console.log(`[sync-job] spec phase succeeded — fetching spec-kit files from ${fresh.targetBranch}`);
+      try {
+        const files = await fetchSpecKitFilesFromBranch(fresh.targetBranch.trim());
+        const specMd = files.spec?.trim() || null;
+        const planMd = files.plan?.trim() || null;
+        const tasksMd = files.tasks?.trim() || null;
+        const reqMd = files.requirements?.trim() || null;
+        const resMd = files.research?.trim() || null;
+
+        if (specMd || planMd || tasksMd) {
+          const combinedMarkdown = [
+            specMd ? `# Specification\n\n${specMd}` : null,
+            reqMd ? `# Requirements\n\n${reqMd}` : null,
+            resMd ? `# Research\n\n${resMd}` : null,
+            planMd ? `# Plan\n\n${planMd}` : null,
+            tasksMd ? `# Tasks\n\n${tasksMd}` : null,
+          ]
+            .filter(Boolean)
+            .join("\n\n---\n\n");
+
+          const contentJson = {
+            specKitSource: true,
+            branch: fresh.targetBranch.trim(),
+            prUrl: fresh.prUrl || null,
+            spec: specMd,
+            plan: planMd,
+            tasks: tasksMd,
+            requirements: reqMd,
+            research: resMd,
+            fetchedAt: new Date().toISOString(),
+          };
+
+          const nextVersion = (existingPrd?.version ?? 0) + 1;
+          await prisma.artifact.create({
+            data: {
+              featureId,
+              stage: "PRD",
+              type: ARTIFACT_TYPES.PRD,
+              version: nextVersion,
+              contentMarkdown: combinedMarkdown,
+              contentJson,
+            },
+          });
+
+          await prisma.feature.update({
+            where: { id: featureId },
+            data: { status: "awaiting_review", stage: "PRD" },
+          });
+
+          console.log(
+            `[sync-job] spec-kit PRD artifact created for feature=${featureId} (v${nextVersion}): ` +
+            `spec=${!!specMd} plan=${!!planMd} tasks=${!!tasksMd}`,
+          );
+        } else {
+          console.warn("[sync-job] spec phase done but no md files found on branch");
+          await prisma.cursorAgentJob.update({
+            where: { id: job.id },
+            data: {
+              errorMessage: "Spec phase finished but no spec.md/plan.md/tasks.md found on the branch.",
+            },
+          });
+        }
+      } catch (e) {
+        console.error("[sync-job] failed to fetch spec-kit files", e);
+      }
+    }
+  }
+
+  if (isCursorAgentSucceeded(status) && fresh.jobPhase !== "spec") {
     const feature = await prisma.feature.findUnique({ where: { id: featureId } });
     if (feature?.stage === FeatureStage.IN_BUILD) {
       await prisma.feature.update({

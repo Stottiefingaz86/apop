@@ -71,6 +71,11 @@ function buildCursorPromptPlain(opts: {
   delivery: { repositoryWebUrl: string; productionUrl: string };
 }): string {
   const { title, description, contextPack, prdJson, designSummary, designJson, delivery } = opts;
+
+  if (prdJson?.specKitSource) {
+    return buildSpecKitCursorPrompt({ title, description, prdJson, delivery });
+  }
+
   const lane = prdJson?.roadmapLane ?? contextPack.productArea ?? "—";
   const audience = contextPack.targetAudience ?? (typeof prdJson?.users === "string" ? prdJson.users : "—");
   const roadmapLine = [lane, audience].filter((x) => x && x !== "—").length
@@ -163,6 +168,98 @@ function buildCursorPromptPlain(opts: {
   );
 
   return lines.filter(Boolean).join("\n");
+}
+
+/**
+ * Builds the Cursor Cloud prompt from spec-kit artifacts (spec.md, plan.md, tasks.md).
+ * This replaces the generic prompt when the PRD was created by the spec phase.
+ */
+function buildSpecKitCursorPrompt(opts: {
+  title: string;
+  description: string;
+  prdJson: Record<string, unknown>;
+  delivery: { repositoryWebUrl: string; productionUrl: string };
+}): string {
+  const { title, description, prdJson, delivery } = opts;
+  const specMd = typeof prdJson.spec === "string" ? prdJson.spec.trim() : null;
+  const planMd = typeof prdJson.plan === "string" ? prdJson.plan.trim() : null;
+  const tasksMd = typeof prdJson.tasks === "string" ? prdJson.tasks.trim() : null;
+  const resMd = typeof prdJson.research === "string" ? prdJson.research.trim() : null;
+  const reqMd = typeof prdJson.requirements === "string" ? prdJson.requirements.trim() : null;
+
+  const lines: string[] = [
+    "# Implement this feature using spec-kit",
+    "",
+    "The spec, plan, and tasks below were created by spec-kit's research pipeline.",
+    "Run `speckit-implement` to execute all tasks. Do NOT re-specify or re-plan.",
+    "",
+    "## Where this ships",
+    `- **Repository:** ${delivery.repositoryWebUrl}`,
+    `- **Production:** ${delivery.productionUrl}`,
+    "",
+    "## Feature",
+    `**${title}**`,
+    description || "(none)",
+    "",
+  ];
+
+  if (specMd) {
+    lines.push("---", "", "## Specification (spec.md)", "", specMd, "");
+  }
+
+  if (reqMd) {
+    lines.push("---", "", "## Requirements (requirements.md)", "", reqMd, "");
+  }
+
+  if (resMd) {
+    lines.push("---", "", "## Research (research.md)", "", resMd, "");
+  }
+
+  if (planMd) {
+    lines.push("---", "", "## Plan (plan.md)", "", planMd, "");
+  }
+
+  if (tasksMd) {
+    lines.push("---", "", "## Tasks (tasks.md)", "", tasksMd, "");
+  }
+
+  lines.push(
+    "",
+    "After implementation, run `npm run build` and fix any errors before opening the PR.",
+  );
+
+  return lines.join("\n");
+}
+
+/**
+ * Renders spec-kit style tasks from the PRD JSON as a standalone Ship PRD section.
+ * Shows the full task breakdown with steps so reviewers can see exactly what Cursor Cloud will execute.
+ */
+function specTasksSectionFromPrdJson(prdJson: Record<string, unknown> | null): string {
+  if (!prdJson) return "";
+  const ch = prdJson.cursorHandoff;
+  if (!ch || typeof ch !== "object") return "";
+  const tasks = (ch as Record<string, unknown>).implementationTasks;
+  if (!Array.isArray(tasks) || tasks.length === 0) return "";
+
+  const lines = [
+    "## Spec tasks",
+    "_These are the ordered tasks Cursor Cloud will execute. Review before starting the agent._",
+    "",
+  ];
+  for (const raw of tasks) {
+    if (!raw || typeof raw !== "object") continue;
+    const t = raw as Record<string, unknown>;
+    const id = String(t.id ?? "");
+    const title = String(t.title ?? "");
+    const file = typeof t.file === "string" && t.file.trim() ? t.file.trim() : null;
+    lines.push(`### ${id}: ${title}`);
+    if (file) lines.push(`**File:** \`${file}\``);
+    const steps = Array.isArray(t.steps) ? t.steps : [];
+    for (let i = 0; i < steps.length; i++) lines.push(`${i + 1}. ${String(steps[i])}`);
+    lines.push("");
+  }
+  return lines.join("\n");
 }
 
 export type ComposeShipBriefResult = {
@@ -294,6 +391,7 @@ export function composeShipBriefCore(opts: {
     "## Cursor prompt (implementation brief)",
     stripLeadingH1(prdBody),
     "",
+    specTasksSectionFromPrdJson(prdJson),
     implementationMd,
   ].join("\n");
 
@@ -326,7 +424,19 @@ export function composeShipBriefSummaryMarkdown(opts: {
   const idea = opts.featureDescription?.trim() || "_Add a short description on the feature._";
   const preview = idea.length > 240 ? `${idea.slice(0, 237)}…` : idea;
 
-  return [
+  const prdJson =
+    opts.prd?.contentJson && typeof opts.prd.contentJson === "object"
+      ? (opts.prd.contentJson as Record<string, unknown>)
+      : null;
+
+  const isSpecKit = !!prdJson?.specKitSource;
+  const ch = prdJson?.cursorHandoff;
+  const tasks =
+    ch && typeof ch === "object" && Array.isArray((ch as Record<string, unknown>).implementationTasks)
+      ? ((ch as Record<string, unknown>).implementationTasks as { id: string; title: string }[])
+      : null;
+
+  const lines = [
     `### ${opts.featureTitle}`,
     "",
     "**Idea**",
@@ -336,7 +446,29 @@ export function composeShipBriefSummaryMarkdown(opts: {
     `- Value: ${hasValue ? "Ready" : "Pending"}`,
     `- Design: ${hasDesign ? "Ready" : "Pending"}`,
     `- Cursor prompt: ${hasPrd ? "Ready" : "Pending"}`,
-  ].join("\n");
+  ];
+
+  if (isSpecKit) {
+    const fileChecks = [
+      ["spec.md", !!prdJson.spec],
+      ["requirements.md", !!prdJson.requirements],
+      ["research.md", !!prdJson.research],
+      ["plan.md", !!prdJson.plan],
+      ["tasks.md", !!prdJson.tasks],
+    ] as const;
+    lines.push("", "**Spec-Kit artifacts**");
+    for (const [name, present] of fileChecks) {
+      if (present) lines.push(`- ${name}: Ready`);
+    }
+  } else if (tasks && tasks.length > 0) {
+    lines.push("", `**Spec tasks** (${tasks.length})`);
+    for (const t of tasks.slice(0, 6)) {
+      lines.push(`- **${t.id}** ${t.title}`);
+    }
+    if (tasks.length > 6) lines.push(`- _…and ${tasks.length - 6} more_`);
+  }
+
+  return lines.join("\n");
 }
 
 export function formatDeploymentSection(d: ShipBriefDeploymentInput): string {

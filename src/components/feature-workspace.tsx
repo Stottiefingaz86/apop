@@ -19,6 +19,7 @@ import type {
   RunEvent,
 } from "@prisma/client";
 import { STAGE_DEFAULT_AGENT } from "@/lib/domain/run-lifecycle";
+import { isCursorAgentFinished } from "@/lib/cursor/agent-status";
 import { FEATURE_STAGE_LABEL, PIPELINE_STAGE_SELECT_ORDER } from "@/lib/domain/stages";
 import { FEATURE_STATUS_LABEL } from "@/lib/domain/statuses";
 import { ARTIFACT_TYPES } from "@/lib/domain/artifact-types";
@@ -227,8 +228,14 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
   const [prdJsonDraft, setPrdJsonDraft] = useState("");
   const [prdMdDraft, setPrdMdDraft] = useState("");
   const [autoDeployAfterCursor, setAutoDeployAfterCursor] = useState(true);
+  const [specJob, setSpecJob] = useState<Pick<CursorAgentJob, "id" | "cursorAgentId" | "status" | "agentUrl" | "jobPhase"> | null>(
+    () => {
+      const sj = initial.cursorAgentJobs?.find((j: CursorAgentJob) => (j as CursorAgentJob & { jobPhase?: string }).jobPhase === "spec");
+      return sj ? { id: sj.id, cursorAgentId: sj.cursorAgentId, status: sj.status, agentUrl: sj.agentUrl, jobPhase: "spec" } : null;
+    },
+  );
   const [cursorJob, setCursorJob] = useState<CursorAgentJob | null>(
-    () => initial.cursorAgentJobs?.[0] ?? null,
+    () => initial.cursorAgentJobs?.find((j: CursorAgentJob) => (j as CursorAgentJob & { jobPhase?: string }).jobPhase !== "spec") ?? initial.cursorAgentJobs?.[0] ?? null,
   );
   const [roadmapForm, setRoadmapForm] = useState(() => roadmapFormFromFeature(initial));
   useEffect(() => {
@@ -375,6 +382,7 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
           featureId: feature.id,
           cursorAgentId: j.job.cursorAgentId,
           status: j.job.status ?? "CREATING",
+          jobPhase: "build",
           cursorSummary: j.job.cursorSummary ?? null,
           agentUrl: j.job.agentUrl ?? null,
           prUrl: j.job.prUrl ?? null,
@@ -385,6 +393,34 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
           deployTriggered: j.job.deployTriggered ?? false,
           createdAt: new Date(),
           updatedAt: new Date(),
+        });
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function startSpecRun() {
+    setBusy("spec");
+    try {
+      const res = await fetch(`/api/features/${feature.id}/cursor-spec`, {
+        method: "POST",
+      });
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        job?: { id: string; cursorAgentId: string; status?: string; agentUrl?: string | null; jobPhase?: string };
+      };
+      if (!res.ok) {
+        alert(j.error ?? "Could not start spec agent");
+        return;
+      }
+      if (j.job) {
+        setSpecJob({
+          id: j.job.id,
+          cursorAgentId: j.job.cursorAgentId,
+          status: j.job.status ?? "CREATING",
+          agentUrl: j.job.agentUrl ?? null,
+          jobPhase: "spec",
         });
       }
     } finally {
@@ -423,7 +459,9 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
   }, [feature.id]);
 
   useEffect(() => {
-    if (!cursorJob || !cursorJobNeedsPoll(cursorJob.status)) return;
+    const needsBuildPoll = cursorJob && cursorJobNeedsPoll(cursorJob.status);
+    const needsSpecPoll = specJob && cursorJobNeedsPoll(specJob.status);
+    if (!needsBuildPoll && !needsSpecPoll) return;
     const t = setInterval(() => {
       void (async () => {
         const res = await fetch(`/api/features/${feature.id}/cursor-build`);
@@ -432,7 +470,22 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
           job: CursorAgentJob | null;
           deployTriggered?: boolean;
         };
-        if (data.job) setCursorJob(data.job);
+        if (data.job) {
+          if (data.job.jobPhase === "spec") {
+            setSpecJob({
+              id: data.job.id,
+              cursorAgentId: data.job.cursorAgentId,
+              status: data.job.status,
+              agentUrl: data.job.agentUrl,
+              jobPhase: "spec",
+            });
+            if (isCursorAgentFinished(data.job.status)) {
+              void pullWorkspace();
+            }
+          } else {
+            setCursorJob(data.job);
+          }
+        }
         if (data.deployTriggered) {
           void fetchReleases(true);
           void pullWorkspace();
@@ -440,7 +493,7 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
       })();
     }, 5000);
     return () => clearInterval(t);
-  }, [cursorJob, feature.id, fetchReleases, pullWorkspace]);
+  }, [cursorJob, specJob, feature.id, fetchReleases, pullWorkspace]);
 
   useEffect(() => {
     if (!latestRelease) return;
@@ -1418,6 +1471,43 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
               </section>
             ) : null}
 
+            {(feature.stage === "VALUE_REVIEW" || feature.stage === "PRD" || feature.stage === "DESIGN_SPEC") ? (
+              <section className="rounded-xl border border-violet-500/25 bg-violet-500/[0.05] p-4">
+                <h2 className="text-[14px] font-semibold tracking-tight">Spec-Kit (Research)</h2>
+                <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                  Launches Cursor Cloud to run spec-kit and produce <strong className="text-foreground">spec.md</strong>,{" "}
+                  <strong className="text-foreground">plan.md</strong>, and{" "}
+                  <strong className="text-foreground">tasks.md</strong>. These become the PRD for the build phase.
+                </p>
+                {specJob ? (
+                  <div className="mt-3 flex flex-col gap-1.5">
+                    <p className="text-[12px] text-muted-foreground">
+                      Spec agent: <strong className="text-foreground">{specJob.status ?? "starting"}</strong>
+                    </p>
+                    {specJob.agentUrl ? (
+                      <a
+                        href={specJob.agentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[12px] text-primary underline underline-offset-2"
+                      >
+                        Open spec agent
+                      </a>
+                    ) : null}
+                  </div>
+                ) : (
+                  <Button
+                    className="mt-3 w-full"
+                    variant="outline"
+                    onClick={() => void startSpecRun()}
+                    disabled={!!busy}
+                  >
+                    {busy === "spec" ? "Starting…" : "Run Spec-Kit"}
+                  </Button>
+                )}
+              </section>
+            ) : null}
+
             {implementationUnlocked || cursorJob ? (
               <section className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4">
                 <h2 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1690,9 +1780,168 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
                 </div>
               </section>
             ) : null}
+
+            {(feature.stage === "DONE" || feature.stage === "QA" || feature.stage === "IN_BUILD" || releases.length > 0) ? (
+              <PerformanceInsightsPanel featureId={feature.id} featureTitle={feature.title} />
+            ) : null}
           </aside>
         </div>
       </div>
     </div>
+  );
+}
+
+function PerformanceInsightsPanel({ featureId, featureTitle }: { featureId: string; featureTitle: string }) {
+  const [snapshot, setSnapshot] = useState<{
+    impressions: number;
+    clicks: number;
+    ctr: number | null;
+    daysSinceDeployed: number | null;
+    hypothesis: string | null;
+    hypothesisKpi: string | null;
+    expectedLiftPercent: number | null;
+    expectedLiftMetric: string | null;
+  } | null>(null);
+  const [insights, setInsights] = useState<{
+    id: string;
+    verdict: string | null;
+    summary: string | null;
+    recommendations: string | null;
+    createdAt: string;
+    contentJson: unknown;
+  }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/features/${featureId}/performance`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSnapshot(data.snapshot);
+      setInsights(data.insights ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [featureId]);
+
+  useEffect(() => {
+    void fetchData();
+  }, [fetchData]);
+
+  async function runReview() {
+    setReviewing(true);
+    try {
+      const res = await fetch(`/api/features/${featureId}/performance`, { method: "POST" });
+      if (res.ok) {
+        void fetchData();
+      }
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  const latestInsight = insights[0];
+  const review = latestInsight?.contentJson as Record<string, unknown> | null;
+
+  const verdictColors: Record<string, string> = {
+    no_data: "text-muted-foreground",
+    underperforming: "text-red-500",
+    needs_attention: "text-amber-500",
+    on_track: "text-blue-500",
+    strong: "text-emerald-500",
+  };
+  const verdictLabels: Record<string, string> = {
+    no_data: "No data yet",
+    underperforming: "Underperforming",
+    needs_attention: "Needs attention",
+    on_track: "On track",
+    strong: "Strong performance",
+  };
+
+  return (
+    <section className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-4">
+      <h2 className="text-[14px] font-semibold tracking-tight">Performance Insights</h2>
+      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+        Hypothesis vs actual data. How is <strong className="text-foreground">{featureTitle}</strong> performing post-launch?
+      </p>
+
+      {loading && !snapshot ? (
+        <p className="mt-3 text-[12px] text-muted-foreground">Loading metrics…</p>
+      ) : snapshot ? (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg bg-background/60 p-2">
+              <p className="text-[18px] font-bold tabular-nums">{snapshot.impressions.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground">Impressions</p>
+            </div>
+            <div className="rounded-lg bg-background/60 p-2">
+              <p className="text-[18px] font-bold tabular-nums">{snapshot.clicks.toLocaleString()}</p>
+              <p className="text-[10px] text-muted-foreground">Clicks</p>
+            </div>
+            <div className="rounded-lg bg-background/60 p-2">
+              <p className="text-[18px] font-bold tabular-nums">{snapshot.ctr != null ? `${snapshot.ctr}%` : "—"}</p>
+              <p className="text-[10px] text-muted-foreground">CTR</p>
+            </div>
+          </div>
+
+          {(snapshot.hypothesis || snapshot.expectedLiftPercent != null) ? (
+            <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Hypothesis</p>
+              {snapshot.hypothesis ? (
+                <p className="mt-0.5 text-[12px]">{snapshot.hypothesis}</p>
+              ) : null}
+              {snapshot.expectedLiftPercent != null ? (
+                <p className="mt-0.5 text-[12px]">
+                  Expected: <strong>{snapshot.expectedLiftPercent}%</strong> lift
+                  {snapshot.expectedLiftMetric ? ` on ${snapshot.expectedLiftMetric}` : ""}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {latestInsight ? (
+            <div className="rounded-lg border border-border/50 bg-background/40 p-2.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Latest review</p>
+                <span className={`text-[11px] font-semibold ${verdictColors[latestInsight.verdict ?? "no_data"] ?? "text-muted-foreground"}`}>
+                  {verdictLabels[latestInsight.verdict ?? "no_data"] ?? latestInsight.verdict}
+                </span>
+              </div>
+              {latestInsight.summary ? (
+                <p className="mt-1 text-[12px] leading-relaxed">{latestInsight.summary}</p>
+              ) : null}
+              {latestInsight.recommendations ? (
+                <div className="mt-2">
+                  <p className="text-[11px] font-medium text-muted-foreground">Recommendations</p>
+                  <ul className="mt-0.5 space-y-0.5">
+                    {latestInsight.recommendations.split("\n").filter(Boolean).map((r, i) => (
+                      <li key={i} className="text-[12px] leading-relaxed">• {r}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {review?.shouldIterate && typeof review.iterationBrief === "string" ? (
+                <div className="mt-2 rounded border border-amber-500/30 bg-amber-500/[0.06] p-2">
+                  <p className="text-[11px] font-medium text-amber-600">Iteration recommended</p>
+                  <p className="mt-0.5 text-[12px]">{review.iterationBrief}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-1 w-full"
+            onClick={() => void runReview()}
+            disabled={reviewing}
+          >
+            {reviewing ? "Analyzing…" : latestInsight ? "Refresh review" : "Run performance review"}
+          </Button>
+        </div>
+      ) : null}
+    </section>
   );
 }

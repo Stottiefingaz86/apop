@@ -1,16 +1,37 @@
 import type { ComposeShipBriefResult } from "@/lib/domain/ship-brief";
 import { cursorPromptReferenceImagesPreamble } from "@/lib/cursor/cursor-prompt-images";
 
-const CURSOR_INTRO = [
-  "# Implement this feature",
-  "",
-  "Execute the tasks below. Do NOT re-plan or re-specify — the spec, plan, and tasks",
-  "were already produced by APOP's research pipeline. Jump straight to implementation.",
-  "",
-  "Search the repo for similar UI first; extend existing components. Next.js App Router, shadcn/ui.",
-  "Run `npm run build` when done and fix any errors before opening the PR.",
-  "",
-].join("\n");
+/**
+ * When the PRD has spec-kit source files, use speckit-implement.
+ * Otherwise fall back to the standard APOP implementation prompt.
+ */
+function buildIntro(prdJson: Record<string, unknown> | null): string {
+  if (prdJson?.specKitSource) {
+    return [
+      "# Implement this feature using spec-kit",
+      "",
+      "This repo has spec-kit installed. The spec, plan, and tasks were already created",
+      "in a previous spec-kit run and exist in the repo (or in this branch).",
+      "",
+      "Run the `speckit-implement` skill to execute all tasks from the existing tasks.md.",
+      "Do NOT re-specify or re-plan. Just implement.",
+      "",
+      "After implementation, run `npm run build` and fix any errors before opening the PR.",
+      "",
+    ].join("\n");
+  }
+
+  return [
+    "# Implement this feature",
+    "",
+    "Execute the tasks below. Do NOT re-plan or re-specify — the spec, plan, and tasks",
+    "were already produced by APOP's research pipeline. Jump straight to implementation.",
+    "",
+    "Search the repo for similar UI first; extend existing components. Next.js App Router, shadcn/ui.",
+    "Run `npm run build` when done and fix any errors before opening the PR.",
+    "",
+  ].join("\n");
+}
 
 function journeyMapTrackingSection(featureId: string, apopAppUrl: string): string {
   const base = apopAppUrl.replace(/\/$/, "");
@@ -32,14 +53,16 @@ function journeyMapTrackingSection(featureId: string, apopAppUrl: string): strin
 }
 
 /**
- * Text body sent to Cursor Cloud (before optional image preamble).
- * Lean implementation-only prompt — spec/plan/tasks already done by APOP agents.
+ * Text body sent to Cursor Cloud for the build phase.
+ * If the PRD was created by spec-kit (spec phase), tells Cursor to run speckit-implement.
+ * Otherwise sends the standard APOP implementation brief.
  */
 export function buildCursorHandoffPromptText(
   ship: ComposeShipBriefResult,
-  opts?: { featureId?: string; apopAppUrl?: string },
+  opts?: { featureId?: string; apopAppUrl?: string; prdJson?: Record<string, unknown> | null },
 ): string {
-  const parts = [CURSOR_INTRO, ship.cursorPromptPlain];
+  const intro = buildIntro(opts?.prdJson ?? null);
+  const parts = [intro, ship.cursorPromptPlain];
   if (opts?.featureId && opts?.apopAppUrl) {
     parts.push(journeyMapTrackingSection(opts.featureId, opts.apopAppUrl));
   }
@@ -50,7 +73,7 @@ export function buildCursorHandoffPromptText(
 export function buildCursorHandoffPromptWithPreamble(
   ship: ComposeShipBriefResult,
   referenceImageCount: number,
-  opts?: { featureId?: string; apopAppUrl?: string },
+  opts?: { featureId?: string; apopAppUrl?: string; prdJson?: Record<string, unknown> | null },
 ): string {
   return (
     cursorPromptReferenceImagesPreamble(referenceImageCount) +

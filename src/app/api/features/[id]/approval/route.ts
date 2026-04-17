@@ -4,6 +4,8 @@ import { ApprovalRecordStatus, FeatureStage, FeatureStatus } from "@prisma/clien
 import { prisma } from "@/lib/prisma";
 import { ARTIFACT_TYPES } from "@/lib/domain/artifact-types";
 import { enqueueFeatureRun } from "@/jobs/queue";
+import { isCursorBuildConfigured } from "@/lib/cursor/env";
+import { launchSpecPhaseForFeature } from "@/lib/cursor/spec-phase";
 
 const bodySchema = z.object({
   stage: z.nativeEnum(FeatureStage),
@@ -99,13 +101,26 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   });
 
   if (runStage) {
-    void enqueueFeatureRun({ featureId: id, stage: runStage }).catch(async (e) => {
-      console.error("[approval] enqueueFeatureRun failed", e);
-      await prisma.feature.update({
-        where: { id },
-        data: { status: "failed" },
+    if (runStage === "PRD" && isCursorBuildConfigured()) {
+      void launchSpecPhaseForFeature(id).catch(async (e) => {
+        console.error("[approval] spec-kit launch failed, falling back to PRD agent", e);
+        void enqueueFeatureRun({ featureId: id, stage: "PRD" }).catch(async (e2) => {
+          console.error("[approval] PRD fallback also failed", e2);
+          await prisma.feature.update({
+            where: { id },
+            data: { status: "failed" },
+          });
+        });
       });
-    });
+    } else {
+      void enqueueFeatureRun({ featureId: id, stage: runStage }).catch(async (e) => {
+        console.error("[approval] enqueueFeatureRun failed", e);
+        await prisma.feature.update({
+          where: { id },
+          data: { status: "failed" },
+        });
+      });
+    }
   }
 
   return NextResponse.json({ feature: f });

@@ -9,6 +9,8 @@ import type { ReferenceImageInput, ReferencePdfInput } from "@/lib/domain/featur
 import { validateFeatureAttachments } from "@/lib/domain/feature-attachments";
 import { STAGE_DEFAULT_AGENT } from "@/lib/domain/run-lifecycle";
 import { executeFeatureRun } from "@/jobs/execute-feature-run";
+import { isCursorBuildConfigured } from "@/lib/cursor/env";
+import { launchSpecPhaseForFeature } from "@/lib/cursor/spec-phase";
 
 const patchSchema = z.object({
   title: z.string().min(1).optional(),
@@ -98,6 +100,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       const agent = STAGE_DEFAULT_AGENT[nextStage];
       const okToAutoRun = ["idle", "failed", "blocked"].includes(f.status);
       if (agent && okToAutoRun) {
+        if (nextStage === "PRD" && isCursorBuildConfigured()) {
+          void launchSpecPhaseForFeature(id).catch((e) => {
+            console.error("[features/PATCH] spec-kit launch failed, falling back to PRD agent", e);
+            void executeFeatureRun({ featureId: id, stage: nextStage }).catch((e2) => {
+              console.error("[features/PATCH] PRD fallback also failed", e2);
+            });
+          });
+          const fWithRunning = await prisma.feature.findUnique({ where: { id } });
+          return NextResponse.json(fWithRunning ?? f);
+        }
         await prisma.feature.update({
           where: { id },
           data: { status: "running" },

@@ -12,12 +12,16 @@ import { cn } from "@/lib/utils";
 type RoadmapInsightButtonProps = {
   hypothesis: string | null;
   metrics?: { clicks: number; impressions: number } | null;
+  expectedLiftPercent?: number | null;
+  expectedLiftMetric?: string | null;
   className?: string;
 };
 
 export function RoadmapInsightButton({
   hypothesis,
   metrics,
+  expectedLiftPercent,
+  expectedLiftMetric,
   className,
 }: RoadmapInsightButtonProps) {
   const hasHypothesis = (hypothesis?.trim().length ?? 0) > 0;
@@ -65,17 +69,31 @@ export function RoadmapInsightButton({
             <div className="mt-1.5 flex gap-4 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-[12px]">
               <span className="tabular-nums">
                 <span className="font-semibold text-foreground">
-                  {metrics!.impressions}
+                  {metrics!.impressions.toLocaleString()}
                 </span>
                 <span className="ml-1 text-muted-foreground">impressions</span>
               </span>
               <span className="tabular-nums">
                 <span className="font-semibold text-foreground">
-                  {metrics!.clicks}
+                  {metrics!.clicks.toLocaleString()}
                 </span>
                 <span className="ml-1 text-muted-foreground">clicks</span>
               </span>
+              {metrics!.impressions > 0 ? (
+                <span className="tabular-nums">
+                  <span className="font-semibold text-foreground">
+                    {(Math.round((metrics!.clicks / metrics!.impressions) * 10000) / 100).toFixed(1)}%
+                  </span>
+                  <span className="ml-1 text-muted-foreground">CTR</span>
+                </span>
+              ) : null}
             </div>
+            {expectedLiftPercent != null ? (
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Expected lift: <strong className="text-foreground">{expectedLiftPercent}%</strong>
+                {expectedLiftMetric ? ` on ${expectedLiftMetric}` : ""}
+              </p>
+            ) : null}
           </div>
         ) : (
           <p className="text-[11px] text-muted-foreground">

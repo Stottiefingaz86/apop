@@ -103,10 +103,17 @@ model Feature {
   roadmapExpectedLiftMetric String? @db.VarChar(500)
   /// Target ship date for roadmap time-axis (quarters / months). Null = use createdAt.
   roadmapTargetDate DateTime?
+  /// When the feature was first successfully deployed (set automatically on first release).
+  deployedAt DateTime?
+  /// Pre-launch hypothesis: what we expect this feature to achieve.
+  hypothesis String? @db.Text
+  /// Primary KPI the hypothesis targets (e.g. "conversion rate", "session duration").
+  hypothesisKpi String? @db.VarChar(500)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   journeyTrackingEvents JourneyTrackingEvent[]
+  performanceInsights PerformanceInsight[]
   runs           Run[]
   artifacts      Artifact[]
   agentQuestions AgentQuestion[]
@@ -123,6 +130,8 @@ model CursorAgentJob {
   feature          Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
   cursorAgentId    String   @unique
   status           String?
+  /// "spec" = spec-kit specify+plan+tasks only; "build" = implement from existing spec
+  jobPhase         String   @default("build")
   /// Latest human-readable line from Cursor Cloud Agents API (`summary` field) when present
   cursorSummary    String?  @db.Text
   agentUrl         String?
@@ -157,6 +166,31 @@ model Release {
   rawPayload         Json?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+
+  @@index([featureId, createdAt])
+}
+
+/// Post-launch performance insight — snapshots actual metrics, compares to hypothesis, generates recommendations.
+model PerformanceInsight {
+  id          String   @id @default(cuid())
+  featureId   String
+  feature     Feature  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  /// "snapshot" = periodic metric capture; "review" = LLM-generated insight with recommendations
+  kind        String   @db.VarChar(32)
+  /// Actual metrics at time of capture
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  ctr         Float?
+  /// The expected lift when the feature was deployed (copied from Feature at snapshot time)
+  expectedLiftPercent Float?
+  expectedLiftMetric  String? @db.VarChar(500)
+  /// LLM-generated fields (populated for kind="review")
+  verdict     String?  @db.VarChar(100)
+  summary     String?  @db.Text
+  recommendations String? @db.Text
+  /// Full structured JSON from the LLM review
+  contentJson Json?
+  createdAt   DateTime @default(now())
 
   @@index([featureId, createdAt])
 }

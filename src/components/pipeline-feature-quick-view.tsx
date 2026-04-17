@@ -420,6 +420,7 @@ export function PipelineFeatureQuickView({
           featureId: feature.id,
           cursorAgentId: j.job.cursorAgentId,
           status: j.job.status ?? "CREATING",
+          jobPhase: "build",
           cursorSummary: j.job.cursorSummary ?? null,
           agentUrl: j.job.agentUrl ?? null,
           prUrl: j.job.prUrl ?? null,

@@ -74,11 +74,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const pack = parseContextPack(feature.contextPack);
   const promptImages = cursorPromptImagesFromContextPack(pack);
+  const prdJson =
+    prd?.contentJson && typeof prd.contentJson === "object"
+      ? (prd.contentJson as Record<string, unknown>)
+      : null;
+
   const promptText = buildCursorHandoffPromptWithPreamble(ship, promptImages.length, {
     featureId,
     apopAppUrl: getApopAppUrl(),
+    prdJson,
   });
-  const branchName = `apop/${featureId.slice(0, 10)}-${Date.now().toString(36)}`;
+  const specBranch = prdJson?.specKitSource && typeof prdJson.branch === "string"
+    ? prdJson.branch.trim()
+    : null;
+  const buildRef = specBranch || ref;
+  const branchName = specBranch
+    ? specBranch
+    : `apop/${featureId.slice(0, 10)}-${Date.now().toString(36)}`;
 
   const appUrl = getApopAppUrl();
   const webhookUrl =
@@ -91,7 +103,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     promptText,
     promptImages: promptImages.length ? promptImages : undefined,
     repository,
-    ref,
+    ref: buildRef,
     branchName,
     autoCreatePr: true,
     webhookUrl,

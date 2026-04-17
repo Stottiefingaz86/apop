@@ -114,6 +114,13 @@ export async function syncReleaseFromVercelWebhook(
     },
   });
 
+  if (status === "ready") {
+    await prisma.feature.updateMany({
+      where: { id: updated.featureId, deployedAt: null },
+      data: { deployedAt: new Date() },
+    });
+  }
+
   if (status === "error" && !updated.fixRunTriggered) {
     await prisma.release.update({
       where: { id: updated.id },
