@@ -66,12 +66,30 @@ Use any Postgres 14+ instance and set `DATABASE_URL` in `.env`, then `npx prisma
 | Stage | Agent |
 |-------|--------|
 | `VALUE_REVIEW` | value analyst (score + optional questions) |
-| `PRD` | PRD writer |
+| `PRD` | PRD writer **or** [spec-kit](#spec-kit-cursor-cloud) via Cursor Cloud when configured (see below) |
 | `DESIGN_SPEC` | design spec (questions + spec artifact) |
 | `READY_FOR_BUILD` / `IN_BUILD` | build (placeholder) |
 | `QA` | QA (placeholder) — **not a Kanban column**; legacy rows appear under **Done** |
 
 `INBOX` / `DONE` / `REJECTED` have no default run. Move the card on the Kanban (with DB connected) or adjust stage in the app as you build that flow.
+
+### Spec-kit (Cursor Cloud)
+
+APOP can drive **[GitHub spec-kit](https://github.com/github/spec-kit)** on your **delivery repo** (default: **site-apop** — the Next.js app you ship), so the PRD is real `spec.md` / `plan.md` / `tasks.md` instead of only the in-process LLM PRD writer.
+
+**Requirements**
+
+- Initialize spec-kit in the delivery repo (skills under `.cursor/skills`, templates under `.specify/`, etc.) — see the spec-kit README.
+- In APOP `.env`: **`CURSOR_API_KEY`** and **`CURSOR_BUILD_REPOSITORY`** (GitHub HTTPS URL, e.g. `https://github.com/org/site-apop`). Optional: **`CURSOR_BUILD_REF`** (default `main`), **`CURSOR_WEBHOOK_SECRET`**, **`APOP_APP_URL`** (must be a public HTTPS URL for Cursor webhooks; localhost skips webhooks and relies on **polling** in the UI).
+
+**What happens**
+
+1. **Spec phase** — When the feature reaches **`PRD`** (e.g. after you approve design), APOP launches a Cursor Cloud agent with `jobPhase: spec`. The agent runs spec-kit **specify → plan → tasks** and stops (no full app implementation in this phase). Markdown is usually written under **`specs/<feature-folder>/`** (e.g. `specs/001-my-feature/spec.md`).
+2. **Pull into APOP** — When the agent finishes, APOP **clones** the agent branch on the server and reads those paths (so private repos work wherever `git clone` is authenticated). The combined markdown is saved as the **PRD** artifact (`specKitSource` in JSON). If clone credentials are missing on the host, set up deploy keys or a machine user as you would for any CI clone.
+3. **Build phase** — **Start Cursor agent** uses the spec branch when present, embeds the spec-kit body in the **Ship PRD / Cursor deliverable** prompt, and tells Cursor to run **`speckit-implement`** from the existing tasks.
+4. **Manual** — In the feature workspace sidebar, **Run Spec-Kit** starts the same spec-phase agent without waiting for the pipeline transition.
+
+**Reference:** [github.com/github/spec-kit](https://github.com/github/spec-kit) · Cursor Agents API: [cursor.com/docs/background-agent/api/endpoints](https://cursor.com/docs/background-agent/api/endpoints).
 
 **5. Competitive research context (agents)**
 
@@ -83,7 +101,7 @@ Use any Postgres 14+ instance and set `DATABASE_URL` in `.env`, then `npx prisma
 Runs execute **in the Next.js server process** (`enqueueFeatureRun` → `executeFeatureRun`). There is **no separate worker**.
 
 - **Value analyst:** uses **OpenAI** (`OPENAI_API_KEY`, default model `gpt-4o-mini`) when set; else **Anthropic Claude** when `ANTHROPIC_API_KEY` is set; else **rule-based TypeScript**.
-- **PRD writer:** uses **OpenAI** then **Anthropic** when keys are set — JSON PRD + `cursorHandoff` + `valueHypothesis` tuned for **site-apop** (see `site-apop-dna.ts`); else **template** PRD (still includes a basic `cursorHandoff`).
+- **PRD writer:** uses **OpenAI** then **Anthropic** when keys are set — JSON PRD + `cursorHandoff` + `valueHypothesis` tuned for **site-apop** (see `site-apop-dna.ts`); else **template** PRD (still includes a basic `cursorHandoff`). When **Cursor** env vars are set, the **PRD** stage prefers **spec-kit on Cursor Cloud** (see [Spec-kit](#spec-kit-cursor-cloud) above) instead of this in-process writer.
 - **Design spec:** always builds the structured spec from your tokens/brand; then **OpenAI** / **Anthropic** appends an **implementation narrative for Cursor**, component hints, and a **roadmap value angle**. Without keys, you get the base spec only.
 - **Build / QA agents:** placeholders today.
 
