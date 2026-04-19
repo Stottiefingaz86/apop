@@ -57,6 +57,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { shipPrdMarkdownComponents } from "@/components/ship-prd-markdown";
+import { ShipPrdSectionList } from "@/components/ship-prd-sections";
 import { VercelDeploymentStatus } from "@/components/vercel-deployment-status";
 import { githubTreeUrl } from "@/lib/cursor/github-branch-url";
 import {
@@ -1140,14 +1141,13 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
             <DialogHeader className="shrink-0 border-b border-border/60 px-6 py-4 text-left">
               <DialogTitle>Full Ship PRD</DialogTitle>
               <DialogDescription>
-                Idea, value, design, Cursor prompt, implementation notes, and deployment.
+                Delivery, idea, value, design, Cursor prompt, tasks, implementation, and deployment —
+                grouped so you can jump straight to the block you need.
               </DialogDescription>
             </DialogHeader>
             <ScrollArea className="min-h-0 flex-1 px-6 py-4">
               <div className="pr-3 pb-2">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={shipPrdMarkdownComponents()}>
-                  {shipMarkdownFull}
-                </ReactMarkdown>
+                <ShipPrdSectionList markdown={shipMarkdownFull} />
               </div>
             </ScrollArea>
           </DialogContent>

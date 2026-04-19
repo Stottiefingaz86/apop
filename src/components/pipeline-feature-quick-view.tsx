@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { CursorAgentJob, FeatureStage } from "@prisma/client";
 import { ExternalLink } from "lucide-react";
 import { FEATURE_STAGE_LABEL } from "@/lib/domain/stages";
@@ -26,7 +24,7 @@ import {
   mergeCursorJobForTimeline,
 } from "@/lib/domain/feature-activity-timeline";
 import { STAGE_DEFAULT_AGENT } from "@/lib/domain/run-lifecycle";
-import { shipPrdMarkdownComponents } from "@/components/ship-prd-markdown";
+import { ShipPrdSectionList } from "@/components/ship-prd-sections";
 import { VercelDeploymentStatus } from "@/components/vercel-deployment-status";
 import {
   CURSOR_BRANCH_PREVIEW_HINT,
@@ -683,16 +681,9 @@ export function PipelineFeatureQuickView({
 
                     <section className="space-y-2">
                       <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Full Ship PRD (markdown)
+                        Ship PRD · sections
                       </h3>
-                      <div className="max-w-none rounded-lg border border-border/60 bg-card/50 p-3 text-[13px] leading-relaxed">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
-                          components={shipPrdMarkdownComponents()}
-                        >
-                          {shipMarkdownFull}
-                        </ReactMarkdown>
-                      </div>
+                      <ShipPrdSectionList markdown={shipMarkdownFull} />
                     </section>
                   </div>
                 </div>
@@ -1033,14 +1024,13 @@ export function PipelineFeatureQuickView({
         <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4 text-left">
           <DialogTitle>Full Ship PRD</DialogTitle>
           <DialogDescription className="text-[12px]">
-            Scroll for the complete composed document (idea, value, design, Cursor prompt, deployment).
+            Grouped into blocks — expand the section you need (delivery, idea, value, design,
+            Cursor prompt, tasks, implementation, deployment).
           </DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <div className="max-w-none pb-6 text-[13px] leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={shipPrdMarkdownComponents()}>
-              {shipMarkdownFull}
-            </ReactMarkdown>
+          <div className="pb-6">
+            <ShipPrdSectionList markdown={shipMarkdownFull} />
           </div>
         </div>
       </DialogContent>

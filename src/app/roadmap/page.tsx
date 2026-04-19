@@ -17,13 +17,14 @@ import {
 } from "@/lib/domain/roadmap-time";
 import { buildPortfolioValueSummary } from "@/lib/domain/roadmap-portfolio-summary";
 import { roadmapValueOutlook } from "@/lib/domain/roadmap-value";
+import { formatCtr, roadmapImpactFromFeature } from "@/lib/domain/roadmap-impact";
 import { FEATURE_STAGE_LABEL } from "@/lib/domain/stages";
 import { FEATURE_STATUS_LABEL } from "@/lib/domain/statuses";
 import { normalizeVercelDeploymentUrl } from "@/lib/vercel/deployment-display";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { RoadmapInsightButton } from "@/components/roadmap-insight-button";
 
 export const dynamic = "force-dynamic";
@@ -106,6 +107,20 @@ function groupByTimeAndLane(
   return { byTimeAndLane: result, buckets };
 }
 
+const IMPACT_TONE_CLASS = {
+  positive: "border-emerald-500/40 bg-emerald-500/[0.06] text-emerald-900 dark:text-emerald-100",
+  neutral: "border-amber-500/40 bg-amber-500/[0.06] text-amber-900 dark:text-amber-100",
+  negative: "border-destructive/40 bg-destructive/[0.06] text-destructive",
+  unknown: "border-border/60 bg-muted/30 text-muted-foreground",
+} as const;
+
+const IMPACT_TONE_LABEL = {
+  positive: "On track",
+  neutral: "Needs iteration",
+  negative: "Negative impact",
+  unknown: "No data yet",
+} as const;
+
 function RoadmapFeatureCard({
   f,
   metrics,
@@ -114,9 +129,9 @@ function RoadmapFeatureCard({
   metrics?: { clicks: number; impressions: number };
 }) {
   const outlook = roadmapValueOutlook(f.artifacts);
+  const impact = roadmapImpactFromFeature(f, metrics);
   const latest = f.releases[0];
   const created = parseFeatureDate(f.createdAt);
-  const updated = parseFeatureDate(f.updatedAt);
   const stageKey = f.stage as FeatureStage;
   const cardAccent = STAGE_ACCENT[stageKey] ?? STAGE_ACCENT.INBOX;
   const stageTitle = FEATURE_STAGE_LABEL[stageKey] ?? String(f.stage);
@@ -126,7 +141,7 @@ function RoadmapFeatureCard({
   const attemptLabel = (() => {
     if (!latest) return null;
     if (latest.vercelUrl?.trim()) {
-      return latest.status === "ready" ? "Deployed" : "Preview URL saved (APOP)";
+      return latest.status === "ready" ? "Deployed" : "Preview URL saved";
     }
     if (latest.status === "ready" && !latest.vercelUrl?.trim()) {
       return "Ready but no URL";
@@ -134,30 +149,29 @@ function RoadmapFeatureCard({
     return RELEASE_ATTEMPT[latest.status] ?? latest.status;
   })();
 
-  const explicitMetric = f.roadmapExpectedLiftMetric?.trim() ?? null;
-  const kpiLine = explicitMetric || outlook.kpi?.trim() || null;
-  const liftPct =
-    f.roadmapExpectedLiftPercent != null && Number.isFinite(f.roadmapExpectedLiftPercent)
-      ? f.roadmapExpectedLiftPercent
-      : null;
+  const kpiLine =
+    impact.expectedLiftMetric || outlook.kpi?.trim() || null;
+  const hypothesisShort = outlook.hypothesis
+    ? outlook.hypothesis.length > 160
+      ? `${outlook.hypothesis.slice(0, 157)}…`
+      : outlook.hypothesis
+    : null;
 
   return (
     <Card
       className={cn(
-        "w-[min(92vw,340px)] shrink-0 border-border/80 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-colors hover:border-border",
+        "flex w-[min(92vw,340px)] shrink-0 flex-col gap-3 border-border/80 p-3 shadow-[0_1px_2px_rgba(15,15,15,0.04)] transition-colors hover:border-border",
         cardAccent,
       )}
     >
-      <CardHeader className="gap-2 pb-2">
+      <div className="flex flex-col gap-1.5">
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-[15px] font-semibold leading-snug">
-            <Link
-              href={`/features/${f.id}`}
-              className="text-foreground hover:text-primary hover:underline"
-            >
-              {f.title}
-            </Link>
-          </CardTitle>
+          <Link
+            href={`/features/${f.id}`}
+            className="text-[15px] font-semibold leading-snug text-foreground hover:text-primary hover:underline"
+          >
+            {f.title}
+          </Link>
           <div className="flex flex-wrap items-center gap-1.5">
             <RoadmapInsightButton
               hypothesis={outlook.hypothesis?.trim() ?? null}
@@ -174,87 +188,136 @@ function RoadmapFeatureCard({
           <time dateTime={roadmapDateTimeAttr(created)} className="tabular-nums">
             Started {formatRoadmapShortDate(created)}
           </time>
-          <span className="mx-1 text-border">·</span>
-          <time dateTime={roadmapDateTimeAttr(updated)} className="tabular-nums">
-            Active {formatRoadmapShortDate(updated)}
-          </time>
         </p>
-        {f.description?.trim() ? (
-          <CardDescription className="line-clamp-2 text-[12px] leading-relaxed">
-            {f.description.trim()}
-          </CardDescription>
+      </div>
+
+      {/* ── VALUE BLOCK (pre-launch hypothesis + economics) ────────────── */}
+      <section className="space-y-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 text-[11px] leading-relaxed">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Value (hypothesis)
+        </p>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          <p>
+            <span className="font-semibold text-foreground">KPI: </span>
+            <span className="text-muted-foreground">{kpiLine || "—"}</span>
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Expected lift: </span>
+            <span className="tabular-nums text-muted-foreground">
+              {impact.expectedLiftPercent != null ? `~${impact.expectedLiftPercent}%` : "—"}
+            </span>
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Score: </span>
+            <span className="tabular-nums text-muted-foreground">
+              {outlook.valueScore != null ? `${outlook.valueScore}/10` : "—"}
+            </span>
+          </p>
+          <p>
+            <span className="font-semibold text-foreground">Cost: </span>
+            <span className="text-muted-foreground">
+              {f.roadmapCostEstimate?.trim() || "—"}
+            </span>
+          </p>
+        </div>
+        {hypothesisShort ? (
+          <p className="border-t border-border/50 pt-1.5 text-[11px] text-muted-foreground">
+            {hypothesisShort}
+          </p>
+        ) : (
+          <p className="border-t border-border/50 pt-1.5 text-[11px] italic text-muted-foreground/80">
+            No hypothesis yet — open the PRD to capture one.
+          </p>
+        )}
+      </section>
+
+      {/* ── IMPACT BLOCK (post-launch: always rendered) ─────────────── */}
+      <section
+        className={cn(
+          "space-y-1.5 rounded-lg border px-2.5 py-2 text-[11px] leading-relaxed",
+          IMPACT_TONE_CLASS[impact.tone],
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide">
+            Live impact
+          </p>
+          <span
+            className={cn(
+              "rounded-full border px-1.5 py-[1px] text-[10px] font-medium",
+              impact.tone === "positive" && "border-emerald-600/40 bg-background/60",
+              impact.tone === "neutral" && "border-amber-600/40 bg-background/60",
+              impact.tone === "negative" && "border-destructive/40 bg-background/60",
+              impact.tone === "unknown" && "border-border/70 bg-background/60",
+            )}
+          >
+            {impact.verdict || IMPACT_TONE_LABEL[impact.tone]}
+          </span>
+        </div>
+
+        {impact.isLive || impact.hasMetrics ? (
+          <div className="grid grid-cols-3 gap-2 pt-0.5">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide opacity-80">Impr.</p>
+              <p className="tabular-nums text-[13px] font-semibold">
+                {impact.impressions.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide opacity-80">Clicks</p>
+              <p className="tabular-nums text-[13px] font-semibold">
+                {impact.clicks.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-wide opacity-80">CTR</p>
+              <p className="tabular-nums text-[13px] font-semibold">
+                {formatCtr(impact.ctr)}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <p className="italic opacity-80">
+            Not live yet — impact will appear after deploy and first tracking hits.
+          </p>
+        )}
+
+        {impact.verdictSummary ? (
+          <p className="border-t border-current/15 pt-1.5 opacity-90">
+            {impact.verdictSummary.length > 180
+              ? `${impact.verdictSummary.slice(0, 177)}…`
+              : impact.verdictSummary}
+          </p>
         ) : null}
 
-        {metrics && (metrics.clicks > 0 || metrics.impressions > 0) ? (
-          <div className="flex gap-3 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[11px]">
-            <span className="tabular-nums">
-              <span className="font-semibold text-foreground">{metrics.impressions}</span>
-              <span className="ml-1 text-muted-foreground">impressions</span>
-            </span>
-            <span className="tabular-nums">
-              <span className="font-semibold text-foreground">{metrics.clicks}</span>
-              <span className="ml-1 text-muted-foreground">clicks</span>
-            </span>
-          </div>
-        ) : null}
-        <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 text-[11px] leading-relaxed">
-          {f.roadmapCostEstimate?.trim() ? (
-            <p>
-              <span className="font-semibold text-foreground">Cost / effort: </span>
-              <span className="text-muted-foreground">{f.roadmapCostEstimate.trim()}</span>
-            </p>
-          ) : (
-            <p className="text-muted-foreground">Cost / effort: —</p>
-          )}
-          {kpiLine ? (
-            <p>
-              <span className="font-semibold text-foreground">Target KPI: </span>
-              <span className="text-muted-foreground">{kpiLine}</span>
-            </p>
-          ) : (
-            <p className="text-muted-foreground">Target KPI: —</p>
-          )}
-          {liftPct != null ? (
-            <p>
-              <span className="font-semibold text-foreground">Expected lift: </span>
-              <span className="tabular-nums text-muted-foreground">~{liftPct}%</span>
-            </p>
-          ) : outlook.hypothesis ? (
-            <p className="text-muted-foreground">
-              <span className="font-semibold text-foreground">Hypothesis: </span>
-              {outlook.hypothesis.length > 200
-                ? `${outlook.hypothesis.slice(0, 200)}…`
-                : outlook.hypothesis}
-            </p>
-          ) : outlook.valueScore != null ? (
-            <p className="text-muted-foreground">
-              <span className="font-semibold text-foreground">Analyst score: </span>
-              <span className="tabular-nums">{outlook.valueScore}</span> / 10
-            </p>
-          ) : null}
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-1.5 pt-0 text-[11px] text-muted-foreground">
         {latest ? (
-          <>
-            <p className="m-0 leading-relaxed">
-              Release: <span className="font-medium text-foreground">{attemptLabel}</span>
-            </p>
+          <p className="flex flex-wrap items-center gap-1 border-t border-current/15 pt-1.5 text-[10px] opacity-80">
+            <span>Release: {attemptLabel}</span>
             {deployHref ? (
-              <a
-                href={deployHref}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all font-mono text-[10px] text-primary underline underline-offset-2"
-              >
-                {deployHref}
-              </a>
+              <>
+                <span>·</span>
+                <a
+                  href={deployHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all font-mono underline underline-offset-2"
+                >
+                  {deployHref.replace(/^https?:\/\//, "")}
+                </a>
+              </>
             ) : null}
-          </>
-        ) : (
-          <p className="m-0 leading-relaxed">No deploy recorded in APOP yet.</p>
-        )}
-      </CardContent>
+          </p>
+        ) : null}
+      </section>
+
+      <div className="flex flex-wrap gap-2 pt-0.5">
+        <Button asChild variant="outline" size="sm" className="h-7 px-2 text-[11px]">
+          <Link href={`/features/${f.id}#prd`}>Open PRD</Link>
+        </Button>
+        <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-[11px]">
+          <Link href={`/features/${f.id}`}>Feature</Link>
+        </Button>
+      </div>
     </Card>
   );
 }

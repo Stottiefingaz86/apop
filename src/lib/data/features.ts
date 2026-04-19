@@ -1,4 +1,4 @@
-import type { Artifact, Feature, FeatureStage, Release } from "@prisma/client";
+import type { Artifact, Feature, FeatureStage, PerformanceInsight, Release } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ARTIFACT_TYPES } from "@/lib/domain/artifact-types";
 import type { PipelineListFeature } from "@/lib/domain/pipeline-card-state";
@@ -130,6 +130,11 @@ export type RoadmapFeatureRow = Feature & {
   releases: Pick<Release, "id" | "status" | "vercelUrl" | "createdAt">[];
   /** Value + PRD slices for roadmap (filtered in query) */
   artifacts: Pick<Artifact, "type" | "contentJson" | "version">[];
+  /** Latest review + latest snapshot from post-launch performance loop */
+  performanceInsights: Pick<
+    PerformanceInsight,
+    "id" | "kind" | "verdict" | "summary" | "recommendations" | "impressions" | "clicks" | "ctr" | "expectedLiftPercent" | "expectedLiftMetric" | "createdAt"
+  >[];
 };
 
 /**
@@ -151,6 +156,23 @@ export async function listRoadmapFeatures(): Promise<RoadmapFeatureRow[]> {
         orderBy: [{ type: "asc" }, { version: "desc" }],
         take: 12,
         select: { type: true, contentJson: true, version: true },
+      },
+      performanceInsights: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          kind: true,
+          verdict: true,
+          summary: true,
+          recommendations: true,
+          impressions: true,
+          clicks: true,
+          ctr: true,
+          expectedLiftPercent: true,
+          expectedLiftMetric: true,
+          createdAt: true,
+        },
       },
     },
     orderBy: { createdAt: "asc" },
