@@ -58,12 +58,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { shipPrdMarkdownComponents } from "@/components/ship-prd-markdown";
 import { ShipPrdSectionList } from "@/components/ship-prd-sections";
+import { CursorCloudProgressPanel } from "@/components/cursor-cloud-progress-panel";
 import { VercelDeploymentStatus } from "@/components/vercel-deployment-status";
 import { githubTreeUrl } from "@/lib/cursor/github-branch-url";
-import {
-  CURSOR_BRANCH_PREVIEW_HINT,
-  VERCEL_DEPLOY_HOOK_HINT,
-} from "@/lib/vercel/deploy-hint";
+import { VERCEL_DEPLOY_HOOK_HINT } from "@/lib/vercel/deploy-hint";
 import {
   Dialog,
   DialogContent,
@@ -1509,174 +1507,15 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
             ) : null}
 
             {implementationUnlocked || cursorJob ? (
-              <section className="flex flex-col gap-3 rounded-xl border border-border/80 bg-muted/15 p-4">
-                <h2 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Cursor Cloud
-                </h2>
-                {implementationUnlocked ? (
-                  <>
-                    <label className="flex cursor-pointer items-start gap-2 text-[13px] leading-relaxed">
-                      <input
-                        type="checkbox"
-                        className="mt-1"
-                        checked={autoDeployAfterCursor}
-                        onChange={(e) => setAutoDeployAfterCursor(e.target.checked)}
-                      />
-                      <span>
-                        After the Cursor agent <strong className="font-medium">finishes</strong>, run the deploy
-                        hook on production (
-                        <code className="font-mono text-[11px]">VERCEL_DEPLOY_HOOK_URL</code> required). That
-                        rebuilds <strong className="font-medium">main</strong>, not the agent branch — merge the
-                        PR first if you need new code on production.
-                      </span>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="gradientCta"
-                        onClick={() => void startCursorCloudBuild()}
-                        disabled={!!busy}
-                      >
-                        {busy === "cursor" ? "Starting…" : "Start Cursor agent"}
-                      </Button>
-                      {cursorJob?.agentUrl ? (
-                        <Button type="button" variant="outline" size="sm" asChild>
-                          <a href={cursorJob.agentUrl} target="_blank" rel="noreferrer">
-                            Open agent
-                          </a>
-                        </Button>
-                      ) : null}
-                      {cursorJob?.prUrl ? (
-                        <Button type="button" variant="outline" size="sm" asChild>
-                          <a href={cursorJob.prUrl} target="_blank" rel="noreferrer">
-                            Pull request
-                          </a>
-                        </Button>
-                      ) : null}
-                    </div>
-                  </>
-                ) : null}
-                {cursorJob ? (
-                  <div className="text-[12px] text-muted-foreground">
-                    <p>
-                      Cursor job{" "}
-                      <span className="font-mono text-foreground">{cursorJob.cursorAgentId}</span>
-                      {cursorJob.status ? (
-                        <>
-                          {" "}
-                          · status <span className="text-foreground">{cursorJob.status}</span>
-                        </>
-                      ) : null}
-                    </p>
-                    {cursorJob.cursorSummary?.trim() ? (
-                      <p className="mt-2 rounded-md border border-border/60 bg-background/80 px-2 py-1.5 text-[11px] leading-relaxed text-foreground">
-                        <span className="font-medium text-muted-foreground">From Cursor API: </span>
-                        {cursorJob.cursorSummary.trim()}
-                      </p>
-                    ) : (
-                      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                        Cursor doesn’t expose step-by-step logs here — use <strong>Open agent</strong> for
-                        live Cloud UI. This line fills in when their API returns a <code>summary</code>.
-                      </p>
-                    )}
-                    {cursorJob.autoDeploy && cursorJob.deployTriggered ? (
-                      <p className="pt-1 text-foreground">
-                        Auto-deploy to Vercel was triggered (see Deploy below / releases).
-                      </p>
-                    ) : null}
-                    {!implementationUnlocked && cursorJob.agentUrl ? (
-                      <p className="pt-1">
-                        <a
-                          href={cursorJob.agentUrl}
-                          className="text-primary underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open in Cursor
-                        </a>
-                      </p>
-                    ) : null}
-                    {cursorJob?.errorMessage ? (
-                      <p className="pt-1 text-destructive">{cursorJob.errorMessage}</p>
-                    ) : null}
-                    {cursorJob.targetBranch?.trim() || cursorJob.prUrl?.trim() ? (
-                      <div className="mt-3 space-y-1.5 rounded-md border border-amber-500/35 bg-amber-500/[0.06] px-2.5 py-2 text-[11px] leading-relaxed dark:bg-amber-500/[0.08]">
-                        <p className="font-semibold text-foreground">Cursor preview</p>
-                        {cursorJob.vercelPreviewUrl?.trim() ? (
-                          <a
-                            href={cursorJob.vercelPreviewUrl.trim()}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block break-all text-[12px] font-medium text-primary underline underline-offset-2"
-                          >
-                            Open preview ({cursorJob.vercelPreviewUrl.trim()})
-                          </a>
-                        ) : (
-                          <p className="text-muted-foreground">
-                            Resolving preview URL… keep this page open or use Refresh. Requires{" "}
-                            <code className="rounded bg-muted px-1 font-mono text-[10px]">VERCEL_TOKEN</code>{" "}
-                            and{" "}
-                            <code className="rounded bg-muted px-1 font-mono text-[10px]">
-                              VERCEL_PROJECT_ID
-                            </code>{" "}
-                            on the APOP server (same as the Deploy status integration).
-                          </p>
-                        )}
-                        <p className="text-muted-foreground">
-                          The <strong className="text-foreground">Deploy</strong> section below is only for
-                          hook-triggered builds. This link is the Vercel Preview for Cursor’s branch.
-                        </p>
-                        {cursorJob.targetBranch?.trim() ? (
-                          <p className="font-mono text-[10px] text-foreground">
-                            Branch: {cursorJob.targetBranch.trim()}
-                          </p>
-                        ) : null}
-                        <ul className="list-inside list-disc space-y-0.5 text-muted-foreground">
-                          {cursorJob.prUrl?.trim() ? (
-                            <li>
-                              <a
-                                href={cursorJob.prUrl.trim()}
-                                className="text-primary underline"
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Open pull request
-                              </a>{" "}
-                              — Vercel usually posts the preview URL in a comment or check.
-                            </li>
-                          ) : (
-                            <li>When the PR opens, use it to find the preview link.</li>
-                          )}
-                          {cursorGithubTreeUrl ? (
-                            <li>
-                              <a
-                                href={cursorGithubTreeUrl}
-                                className="text-primary underline"
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                Branch on GitHub
-                              </a>
-                            </li>
-                          ) : null}
-                          <li>
-                            In Vercel: <strong className="text-foreground">Deployments</strong> → find the
-                            preview for this branch.
-                          </li>
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : implementationUnlocked ? (
-                  <p className="text-[12px] text-muted-foreground">
-                    Start a Cloud Agent with the Ship PRD (left). Requires Cursor API key and repo in{" "}
-                    <code className="rounded bg-muted px-1 font-mono text-[11px]">.env</code>.
-                  </p>
-                ) : null}
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  {CURSOR_BRANCH_PREVIEW_HINT}
-                </p>
-              </section>
+              <CursorCloudProgressPanel
+                job={cursorJob}
+                implementationUnlocked={implementationUnlocked}
+                autoDeployAfterCursor={autoDeployAfterCursor}
+                onToggleAutoDeploy={setAutoDeployAfterCursor}
+                onStart={() => void startCursorCloudBuild()}
+                busy={busy}
+                branchTreeUrl={cursorGithubTreeUrl ?? null}
+              />
             ) : null}
 
             {showPrimaryDeploy ? (
