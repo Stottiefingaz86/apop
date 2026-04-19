@@ -59,9 +59,9 @@ import { Input } from "@/components/ui/input";
 import { shipPrdMarkdownComponents } from "@/components/ship-prd-markdown";
 import { ShipPrdSectionList } from "@/components/ship-prd-sections";
 import { CursorCloudProgressPanel } from "@/components/cursor-cloud-progress-panel";
+import { VercelDeploymentsPanel } from "@/components/vercel-deployments-panel";
 import { VercelDeploymentStatus } from "@/components/vercel-deployment-status";
 import { githubTreeUrl } from "@/lib/cursor/github-branch-url";
-import { VERCEL_DEPLOY_HOOK_HINT } from "@/lib/vercel/deploy-hint";
 import {
   Dialog,
   DialogContent,
@@ -1518,30 +1518,15 @@ export function FeatureWorkspace({ initial }: { initial: FeatureWorkspaceModel }
               />
             ) : null}
 
-            {showPrimaryDeploy ? (
-              <section className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
-                <h2 className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Deploy
-                </h2>
-                <p className="text-[13px] leading-relaxed text-muted-foreground">
-                  Push a Vercel deployment when the implementation is ready.
-                </p>
-                <p className="text-[11px] leading-relaxed text-muted-foreground">{VERCEL_DEPLOY_HOOK_HINT}</p>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => void triggerRelease()} disabled={!!busy}>
-                    {busy === "release" ? "Starting…" : "Deploy to Vercel"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void fetchReleases(true)}
-                    disabled={!!busy}
-                  >
-                    Refresh status
-                  </Button>
-                </div>
-                <VercelDeploymentStatus release={latestRelease} />
-              </section>
+            {showPrimaryDeploy || releases.length > 0 ? (
+              <VercelDeploymentsPanel
+                releases={releases}
+                onDeploy={() => void triggerRelease()}
+                onRefresh={() => void fetchReleases(true)}
+                onRemediate={(id) => void runRemediation(id)}
+                busy={busy}
+                canDeploy={showPrimaryDeploy}
+              />
             ) : null}
 
             <section className="flex flex-col gap-2">

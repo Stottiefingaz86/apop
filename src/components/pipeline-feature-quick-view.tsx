@@ -26,8 +26,7 @@ import {
 import { STAGE_DEFAULT_AGENT } from "@/lib/domain/run-lifecycle";
 import { ShipPrdSectionList } from "@/components/ship-prd-sections";
 import { CursorCloudProgressPanel } from "@/components/cursor-cloud-progress-panel";
-import { VercelDeploymentStatus } from "@/components/vercel-deployment-status";
-import { VERCEL_DEPLOY_HOOK_HINT } from "@/lib/vercel/deploy-hint";
+import { VercelDeploymentsPanel } from "@/components/vercel-deployments-panel";
 import { cn } from "@/lib/utils";
 import type { FeatureWorkspaceModel } from "@/components/feature-workspace";
 import {
@@ -723,36 +722,14 @@ export function PipelineFeatureQuickView({
                   />
                 ) : null}
 
-                {showPrimaryDeploy ? (
-                  <section className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-3">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Deploy
-                    </h3>
-                    <p className="text-[12px] leading-relaxed text-muted-foreground">
-                      Trigger Vercel when the build is ready.
-                    </p>
-                    <p className="text-[10px] leading-relaxed text-muted-foreground">{VERCEL_DEPLOY_HOOK_HINT}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => void triggerRelease()}
-                        disabled={!!busy}
-                      >
-                        {busy === "release" ? "Starting…" : "Deploy to Vercel"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void fetchReleases(true)}
-                        disabled={!!busy}
-                      >
-                        Refresh status
-                      </Button>
-                    </div>
-                    <VercelDeploymentStatus release={latestRelease} compact />
-                  </section>
+                {showPrimaryDeploy || releases.length > 0 ? (
+                  <VercelDeploymentsPanel
+                    releases={releases}
+                    onDeploy={() => void triggerRelease()}
+                    onRefresh={() => void fetchReleases(true)}
+                    busy={busy}
+                    canDeploy={showPrimaryDeploy}
+                  />
                 ) : null}
 
                 <section className="space-y-2">
